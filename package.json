@@ -5,8 +5,8 @@
 	"main": "index.js",
 	"scripts": {
 		"test": "vitest",
-		"deploy:dev": "STAGE=dev cdk deploy",
-		"destroy:dev": "STAGE=dev cdk destroy"
+		"deploy:dev": "TARGET_EVENT_BUS_NAME=service-eventbridge-event-bus STAGE=dev cdk deploy",
+		"destroy:dev": "TARGET_EVENT_BUS_NAME=service-eventbridge-event-bus STAGE=dev cdk destroy"
 	},
 	"repository": {
 		"type": "git",

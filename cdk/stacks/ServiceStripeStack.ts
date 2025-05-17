@@ -13,12 +13,12 @@ export class ServiceStripeStack extends Stack {
 	constructor(scope: Construct, id: string, props: StripeStackProps) {
 		super(scope, id, props);
 
-		const { stage, targetEventBusName } = props;
+		const { stage, targetEventBusName, serviceName } = props;
 		const tsConfigPath = path.join(__dirname, "../../tsconfig.json");
 
 		const STRIPE_SECRET_KEY = StringParameter.fromStringParameterAttributes(
 			this,
-			`stripe-secret-key-${stage}`,
+			`${serviceName}-secret-key-${stage}`,
 			{
 				parameterName: `/${stage}/stripe/secret`,
 			},
@@ -26,7 +26,7 @@ export class ServiceStripeStack extends Stack {
 
 		const STRIPE_EVENT_BUS_ID = StringParameter.fromStringParameterAttributes(
 			this,
-			`stripe-event-bus-id-${stage}`,
+			`${serviceName}--event-bus-id-${stage}`,
 			{
 				parameterName: `/${stage}/stripe/event-bus-id`,
 			},
@@ -34,17 +34,17 @@ export class ServiceStripeStack extends Stack {
 
 		const stripeEventBus = EventBus.fromEventBusArn(
 			this,
-			`stripe-event-bus-${stage}`,
+			`${serviceName}-event-bus-${stage}`,
 			`arn:aws:events:${this.region}::event-source/aws.partner/stripe.com/${STRIPE_EVENT_BUS_ID}`,
 		);
 
 		const targetEventBus = EventBus.fromEventBusName(
 			this,
-			`target-event-bus-${stage}`,
+			`${serviceName}-target-event-bus-${stage}`,
 			targetEventBusName,
 		);
 
-		const productsTable = new Table(this, `stripe-products-${stage}`, {
+		const productsTable = new Table(this, `${serviceName}-products-${stage}`, {
 			tableName: `stripe-products-${stage}`,
 			partitionKey: { name: "PK", type: AttributeType.STRING },
 			sortKey: { name: "SK", type: AttributeType.STRING },
@@ -60,9 +60,9 @@ export class ServiceStripeStack extends Stack {
 
 		const createProductLogGroup = new LogGroup(
 			this,
-			`create-product-log-group-${stage}`,
+			`${serviceName}-create-product-log-group-${stage}`,
 			{
-				logGroupName: `/aws/lambda/create-product-${stage}`,
+				logGroupName: `/aws/lambda/${serviceName}-create-product-${stage}`,
 				retention: 7,
 				removalPolicy: RemovalPolicy.DESTROY,
 			},
@@ -70,14 +70,14 @@ export class ServiceStripeStack extends Stack {
 
 		const createProductLambda = new TSLambdaFunction(
 			this,
-			`create-product-lambda-${stage}`,
+			`${serviceName}-create-product-lambda-${stage}`,
 			{
-				serviceName: "cdk-insights",
+				serviceName,
 				stage,
 				handlerName: "createProductHandler",
 				entryPath: createProductLambdaPath,
 				tsConfigPath,
-				functionName: `create-product-${stage}`,
+				functionName: `${serviceName}-create-product-${stage}`,
 				customOptions: {
 					logGroup: createProductLogGroup,
 					timeout: Duration.seconds(30),
@@ -93,10 +93,10 @@ export class ServiceStripeStack extends Stack {
 
 		const newPriceCreatedRule = new Rule(
 			this,
-			`stripe-product-created-rule-${stage}`,
+			`${serviceName}-product-created-rule-${stage}`,
 			{
 				eventBus: stripeEventBus,
-				ruleName: `price-created-rule-${stage}`,
+				ruleName: `${serviceName}-price-created-rule-${stage}`,
 				eventPattern: {
 					source: [`aws.partner/stripe.com/${STRIPE_EVENT_BUS_ID}`],
 					detailType: ["price.created"],
@@ -117,9 +117,9 @@ export class ServiceStripeStack extends Stack {
 
 		const updateProductLogGroup = new LogGroup(
 			this,
-			`update-product-log-group-${stage}`,
+			`${serviceName}-update-product-log-group-${stage}`,
 			{
-				logGroupName: `/aws/lambda/update-product-${stage}`,
+				logGroupName: `/aws/lambda/${serviceName}-update-product-${stage}`,
 				retention: 7,
 				removalPolicy: RemovalPolicy.DESTROY,
 			},
@@ -127,14 +127,14 @@ export class ServiceStripeStack extends Stack {
 
 		const updateProductLambda = new TSLambdaFunction(
 			this,
-			`update-product-lambda-${stage}`,
+			`${serviceName}-update-product-lambda-${stage}`,
 			{
-				serviceName: "cdk-insights",
+				serviceName,
 				stage,
 				handlerName: "updateProductHandler",
 				entryPath: updateProductLambdaPath,
 				tsConfigPath,
-				functionName: `update-product-${stage}`,
+				functionName: `${serviceName}-update-product-${stage}`,
 				customOptions: {
 					logGroup: updateProductLogGroup,
 					timeout: Duration.seconds(30),
@@ -150,10 +150,10 @@ export class ServiceStripeStack extends Stack {
 
 		const priceUpdatedRule = new Rule(
 			this,
-			`stripe-product-updated-rule-${stage}`,
+			`${serviceName}-product-updated-rule-${stage}`,
 			{
 				eventBus: stripeEventBus,
-				ruleName: `price-updated-rule-${stage}`,
+				ruleName: `${serviceName}-price-updated-rule-${stage}`,
 				eventPattern: {
 					source: [`aws.partner/stripe.com/${STRIPE_EVENT_BUS_ID}`],
 					detailType: ["price.updated"],
@@ -174,9 +174,9 @@ export class ServiceStripeStack extends Stack {
 
 		const deleteProductLogGroup = new LogGroup(
 			this,
-			`product-deleted-log-group-${stage}`,
+			`${serviceName}-product-deleted-log-group-${stage}`,
 			{
-				logGroupName: `/aws/lambda/delete-product-${stage}`,
+				logGroupName: `/aws/lambda/${serviceName}-delete-product-${stage}`,
 				retention: 7,
 				removalPolicy: RemovalPolicy.DESTROY,
 			},
@@ -184,14 +184,14 @@ export class ServiceStripeStack extends Stack {
 
 		const deleteProductLambda = new TSLambdaFunction(
 			this,
-			`delete-product-lambda-${stage}`,
+			`${serviceName}-delete-product-lambda-${stage}`,
 			{
-				serviceName: "cdk-insights",
+				serviceName,
 				stage,
 				handlerName: "deleteProductHandler",
 				entryPath: deleteProductLambdaPath,
 				tsConfigPath,
-				functionName: `delete-product-${stage}`,
+				functionName: `${serviceName}-delete-product-${stage}`,
 				customOptions: {
 					logGroup: deleteProductLogGroup,
 					timeout: Duration.seconds(30),
@@ -207,10 +207,10 @@ export class ServiceStripeStack extends Stack {
 
 		const productDeletedRule = new Rule(
 			this,
-			`stripe-product-deleted-rule-${stage}`,
+			`${serviceName}-product-deleted-rule-${stage}`,
 			{
 				eventBus: stripeEventBus,
-				ruleName: `product-deleted-rule-${stage}`,
+				ruleName: `${serviceName}-product-deleted-rule-${stage}`,
 				eventPattern: {
 					source: [`aws.partner/stripe.com/${STRIPE_EVENT_BUS_ID}`],
 					detailType: ["product.deleted", "price.deleted"],
@@ -231,9 +231,9 @@ export class ServiceStripeStack extends Stack {
 
 		const sessionEventConductorLogGroup = new LogGroup(
 			this,
-			`stripe-session-conductor-lambda-log-group-${stage}`,
+			`${serviceName}-session-conductor-lambda-log-group-${stage}`,
 			{
-				logGroupName: `/aws/lambda/stripe-session-conductor-${stage}`,
+				logGroupName: `/aws/lambda/${serviceName}-session-conductor-${stage}`,
 				retention: 7,
 				removalPolicy: RemovalPolicy.DESTROY,
 			},
@@ -241,14 +241,14 @@ export class ServiceStripeStack extends Stack {
 
 		const sessionEventConductorLambda = new TSLambdaFunction(
 			this,
-			`stripe-session-conductor-lambda-${stage}`,
+			`${serviceName}-session-conductor-lambda-${stage}`,
 			{
-				serviceName: "cdk-insights",
+				serviceName,
 				stage,
 				handlerName: "sessionEventConductorHandler",
 				entryPath: sessionEventConductorLambdaPath,
 				tsConfigPath,
-				functionName: `cdk-insights-stripe-session-conductor-${stage}`,
+				functionName: `${serviceName}-session-conductor-${stage}`,
 				customOptions: {
 					logGroup: sessionEventConductorLogGroup,
 					timeout: Duration.seconds(30),
@@ -268,10 +268,10 @@ export class ServiceStripeStack extends Stack {
 
 		const sessionConductorRule = new Rule(
 			this,
-			`stripe-session-conductor-rule-${stage}`,
+			`${serviceName}-session-conductor-rule-${stage}`,
 			{
 				eventBus: stripeEventBus,
-				ruleName: `session-conductor-rule-${stage}`,
+				ruleName: `${serviceName}-session-conductor-rule-${stage}`,
 				eventPattern: {
 					source: [`aws.partner/stripe.com/${STRIPE_EVENT_BUS_ID}`],
 					detailType: ["checkout.session.completed"],
@@ -290,9 +290,9 @@ export class ServiceStripeStack extends Stack {
 
 		const subscriptionEventConductorLogGroup = new LogGroup(
 			this,
-			`stripe-subscription-conductor-log-group-${stage}`,
+			`${serviceName}-subscription-conductor-log-group-${stage}`,
 			{
-				logGroupName: `/aws/lambda/stripe-subscription-conductor-${stage}`,
+				logGroupName: `/aws/lambda/${serviceName}-subscription-conductor-${stage}`,
 				retention: 7,
 				removalPolicy: RemovalPolicy.DESTROY,
 			},
@@ -300,14 +300,14 @@ export class ServiceStripeStack extends Stack {
 
 		const subscriptionEventConductorLambda = new TSLambdaFunction(
 			this,
-			`stripe-subscription-created-lambda-${stage}`,
+			`${serviceName}-subscription-created-lambda-${stage}`,
 			{
-				serviceName: "cdk-insights",
+				serviceName,
 				stage,
 				handlerName: "subscriptionEventConductorHandler",
 				entryPath: subscriptionEventConductorPath,
 				tsConfigPath,
-				functionName: `cdk-insights-subscription-conductor-${stage}`,
+				functionName: `${serviceName}-subscription-conductor-${stage}`,
 				customOptions: {
 					logGroup: subscriptionEventConductorLogGroup,
 					timeout: Duration.seconds(30),
@@ -327,10 +327,10 @@ export class ServiceStripeStack extends Stack {
 
 		const subscriptionConductorRule = new Rule(
 			this,
-			`stripe-subscription-conductor-rule-${stage}`,
+			`${serviceName}-subscription-conductor-rule-${stage}`,
 			{
 				eventBus: stripeEventBus,
-				ruleName: `subscription-conductor-rule-${stage}`,
+				ruleName: `${serviceName}-subscription-conductor-rule-${stage}`,
 				eventPattern: {
 					source: [`aws.partner/stripe.com/${STRIPE_EVENT_BUS_ID}`],
 					detailType: [
