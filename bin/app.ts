@@ -6,10 +6,10 @@ const app = new cdk.App();
 
 const stage = process.env.STAGE || "dev";
 const targetEventBusName =
-	process.env.TARGET_EVENT_BUS_NAME || `target-event-bus-${stage}`;
+	process.env.TARGET_EVENT_BUS_NAME || "target-event-bus";
 
 new ServiceStripeStack(app, "ServiceStripeStack", {
 	stage,
 	serviceName: "service-stripe",
-	targetEventBusName,
+	targetEventBusName: `${targetEventBusName}-${stage}`,
 });
