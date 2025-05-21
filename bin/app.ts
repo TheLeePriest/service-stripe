@@ -8,7 +8,7 @@ const stage = process.env.STAGE || "dev";
 const targetEventBusName =
 	process.env.TARGET_EVENT_BUS_NAME || "target-event-bus";
 
-new ServiceStripeStack(app, "ServiceStripeStack", {
+new ServiceStripeStack(app, `ServiceStripeStack-${stage}`, {
 	stage,
 	serviceName: "service-stripe",
 	targetEventBusName: `${targetEventBusName}-${stage}`,
