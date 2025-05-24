@@ -33,7 +33,7 @@ export const subscriptionCreated =
 			const product = await stripe.products.retrieve(
 				item.price.product as string,
 			);
-
+			const { current_period_end } = item;
 			await eventBridgeClient.send(
 				new PutEventsCommand({
 					Entries: [
@@ -55,6 +55,7 @@ export const subscriptionCreated =
 								cancelAtPeriodEnd: cancel_at_period_end,
 								trialStart: trial_start,
 								trialEnd: trial_end,
+								expiresAt: current_period_end,
 								metadata: item.metadata,
 							}),
 						},
