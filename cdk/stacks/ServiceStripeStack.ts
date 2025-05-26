@@ -8,6 +8,12 @@ import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { LogGroup } from "aws-cdk-lib/aws-logs";
 import { StringParameter } from "aws-cdk-lib/aws-ssm";
 import { EventBus, Rule } from "aws-cdk-lib/aws-events";
+import {
+	Role,
+	ServicePrincipal,
+	PolicyStatement,
+	Effect,
+} from "aws-cdk-lib/aws-iam";
 
 export class ServiceStripeStack extends Stack {
 	constructor(scope: Construct, id: string, props: StripeStackProps) {
@@ -42,6 +48,23 @@ export class ServiceStripeStack extends Stack {
 			this,
 			`${serviceName}-target-event-bus-${stage}`,
 			targetEventBusName,
+		);
+
+		const schedulerRole = new Role(
+			this,
+			`${serviceName}-target-event-bus-scheduler-role-${stage}`,
+			{
+				assumedBy: new ServicePrincipal("scheduler.amazonaws.com"),
+				description:
+					"Role that EventBridge Scheduler uses to put events into the target bus",
+			},
+		);
+
+		schedulerRole.addToPolicy(
+			new PolicyStatement({
+				actions: ["events:PutEvents"],
+				resources: [targetEventBus.eventBusArn],
+			}),
 		);
 
 		const productsTable = new Table(this, `${serviceName}-products-${stage}`, {
@@ -316,6 +339,8 @@ export class ServiceStripeStack extends Stack {
 						STRIPE_SECRET_KEY,
 						STAGE: stage,
 						TARGET_EVENT_BUS_NAME: targetEventBusName,
+						SCHEDULER_ROLE_ARN: schedulerRole.roleArn,
+						EVENT_BUS_ARN: targetEventBus.eventBusArn,
 					},
 				},
 			},
@@ -344,6 +369,22 @@ export class ServiceStripeStack extends Stack {
 
 		subscriptionConductorRule.addTarget(
 			new LambdaFunction(subscriptionEventConductorLambda.tsLambdaFunction),
+		);
+
+		subscriptionEventConductorLambda.tsLambdaFunction.addToRolePolicy(
+			new PolicyStatement({
+				actions: [
+					"scheduler:CreateSchedule",
+					"scheduler:UpdateSchedule",
+					"scheduler:GetSchedule",
+					"scheduler:DeleteSchedule",
+					"iam:PassRole",
+				],
+				resources: [
+					schedulerRole.roleArn,
+					`arn:aws:scheduler:${this.region}:${this.account}:schedule/default/*`,
+				],
+			}),
 		);
 	}
 }

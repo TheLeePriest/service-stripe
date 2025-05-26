@@ -3,6 +3,7 @@ import type {
 	PutEventsCommandOutput,
 } from "@aws-sdk/client-eventbridge";
 import type Stripe from "stripe";
+import type { SchedulerClient } from "../types/aws.types";
 
 export type SubscriptionEventConductorDependencies = {
 	stripe: Stripe;
@@ -11,6 +12,9 @@ export type SubscriptionEventConductorDependencies = {
 	};
 	uuidv4: () => string;
 	eventBusName: string;
+	eventBusSchedulerRoleArn: string;
+	eventBusArn: string;
+	schedulerClient: SchedulerClient;
 };
 
 export type StripeEventBridgeDetail = {

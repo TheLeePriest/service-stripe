@@ -30,6 +30,7 @@
 		"@aws-sdk/client-api-gateway": "^3.812.0",
 		"@aws-sdk/client-dynamodb": "^3.812.0",
 		"@aws-sdk/client-eventbridge": "^3.812.0",
+		"@aws-sdk/client-scheduler": "^3.817.0",
 		"@aws-sdk/types": "^3.804.0",
 		"@types/aws-lambda": "^8.10.149",
 		"aws-cdk-lib": "^2.196.0",

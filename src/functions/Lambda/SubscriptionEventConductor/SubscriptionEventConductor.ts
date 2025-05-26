@@ -5,6 +5,7 @@ import type {
 	SubscriptionEventConductorDependencies,
 	StripeEventBridgeDetail,
 } from "./SubscriptionEventConductor.types";
+import { subscriptionUpdated } from "../SubscriptionUpdated/SubscriptionUpdated";
 
 export const subscriptionEventConductor =
 	({
@@ -12,11 +13,15 @@ export const subscriptionEventConductor =
 		eventBridgeClient,
 		uuidv4,
 		eventBusName,
+		eventBusArn,
+		eventBusSchedulerRoleArn,
+		schedulerClient,
 	}: SubscriptionEventConductorDependencies) =>
 	async (event: EventBridgeEvent<string, StripeEventBridgeDetail>) => {
 		const stripeEvent = event.detail;
 		const subscription = stripeEvent.data;
-
+		console.log(stripeEvent, "stripeEvent");
+		console.log(subscription, "subscriptionEventConductor");
 		switch (stripeEvent.type) {
 			case "customer.subscription.created":
 				await subscriptionCreated({
@@ -26,9 +31,16 @@ export const subscriptionEventConductor =
 					eventBusName,
 				})(subscription);
 				break;
-			// case 'customer.subscription.updated':
-			//   await handleSubscriptionUpdated(subscription);
-			//   break;
+			case "customer.subscription.updated":
+				await subscriptionUpdated({
+					stripe,
+					eventBridgeClient,
+					eventBusArn,
+					eventBusSchedulerRoleArn,
+					eventBusName,
+					schedulerClient,
+				})(subscription);
+				break;
 			case "customer.subscription.deleted":
 				await subscriptionDeleted({
 					stripe,
