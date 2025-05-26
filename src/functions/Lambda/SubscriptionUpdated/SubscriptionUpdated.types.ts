@@ -1,17 +1,16 @@
 import type {
-	PutEventsCommand,
-	PutEventsCommandOutput,
+  PutEventsCommand,
+  PutEventsCommandOutput,
 } from "@aws-sdk/client-eventbridge";
 import type Stripe from "stripe";
 import type { SchedulerClient } from "../types/aws.types";
 
 export type SubscriptionUpdatedDependencies = {
-	stripe: Stripe;
-	eventBridgeClient: {
-		send: (command: PutEventsCommand) => Promise<PutEventsCommandOutput>;
-	};
-	eventBusName: string;
-	eventBusArn: string;
-	eventBusSchedulerRoleArn: string;
-	schedulerClient: SchedulerClient;
+  eventBridgeClient: {
+    send: (command: PutEventsCommand) => Promise<PutEventsCommandOutput>;
+  };
+  eventBusName: string;
+  eventBusArn: string;
+  eventBusSchedulerRoleArn: string;
+  schedulerClient: SchedulerClient;
 };
