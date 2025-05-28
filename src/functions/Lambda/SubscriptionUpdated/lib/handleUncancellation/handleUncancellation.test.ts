@@ -5,6 +5,7 @@ import {
   ResourceNotFoundException,
 } from "@aws-sdk/client-scheduler";
 import type Stripe from "stripe";
+import type { SubscriptionUpdatedEvent } from "../../SubscriptionUpdated.types";
 
 vi.mock("@aws-sdk/client-scheduler", async () => {
   const actual = await vi.importActual<
@@ -23,13 +24,21 @@ const mockSchedulerClient = {
   send: mockSend,
 };
 
-const makeSubscription = (itemIds: string[]): Stripe.Subscription =>
-  ({
-    id: "sub_123",
-    items: {
-      data: itemIds.map((id) => ({ id }) as Partial<Stripe.SubscriptionItem>),
-    },
-  }) as Stripe.Subscription;
+const makeSubscription = (itemIds: string[]): SubscriptionUpdatedEvent => ({
+  id: "sub_123",
+  customer: "cus_123",
+  status: "active",
+  cancel_at_period_end: false,
+  items: {
+    data: itemIds.map((id) => ({
+      id,
+      price: { product: "prod_123", id: "price_123" },
+      quantity: 1,
+      current_period_end: 1234567890,
+      metadata: {},
+    })),
+  },
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -44,10 +53,10 @@ describe("handleUncancellation", () => {
 
     expect(mockSend).toHaveBeenCalledTimes(2);
     expect(DeleteScheduleCommand).toHaveBeenCalledWith({
-      Name: "subscription-cancel-sub_123-item_1",
+      Name: "subscription-cancel-sub_123",
     });
     expect(DeleteScheduleCommand).toHaveBeenCalledWith({
-      Name: "subscription-cancel-sub_123-item_2",
+      Name: "subscription-cancel-sub_123",
     });
   });
 
@@ -61,7 +70,7 @@ describe("handleUncancellation", () => {
     await handleUncancellation(subscription, mockSchedulerClient);
 
     expect(logSpy).toHaveBeenCalledWith(
-      "Schedule subscription-cancel-sub_123-item_1 not found; skipping.",
+      "Schedule subscription-cancel-sub_123 not found; skipping.",
     );
     logSpy.mockRestore();
   });
@@ -77,7 +86,7 @@ describe("handleUncancellation", () => {
       handleUncancellation(subscription, mockSchedulerClient),
     ).rejects.toEqual(error);
     expect(errorSpy).toHaveBeenCalledWith(
-      "Error deleting schedule subscription-cancel-sub_123-item_1:",
+      "Error deleting schedule subscription-cancel-sub_123:",
       error,
     );
 

@@ -1,66 +1,97 @@
-import type { SubscriptionCreatedDependencies } from "./SubscriptionCreated.types";
+import type {
+  SubscriptionCreatedDependencies,
+  SubscriptionCreatedEvent,
+} from "./SubscriptionCreated.types";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import type Stripe from "stripe";
 
 export const subscriptionCreated =
-	({
-		stripe,
-		uuidv4,
-		eventBridgeClient,
-		eventBusName,
-	}: SubscriptionCreatedDependencies) =>
-	async (event: Stripe.CustomerSubscriptionCreatedEvent.Data) => {
-		const { object } = event;
-		console.log("Subscription Created Event:", event);
-		console.log("Subscription Object:", JSON.stringify(object));
-		const {
-			items: subscribedItems,
-			customer,
-			id: stripeSubscriptionId,
-			status,
-			cancel_at_period_end,
-			trial_start,
-			trial_end,
-			created,
-		} = object;
-		const stripeCustomer = (await stripe.customers.retrieve(
-			customer as string,
-		)) as Stripe.Customer;
-		const { email } = stripeCustomer;
+  (dependencies: SubscriptionCreatedDependencies) =>
+  async (subscription: SubscriptionCreatedEvent) => {
+    const { stripe, uuidv4, eventBridgeClient, eventBusName } = dependencies;
 
-		for (const item of subscribedItems.data) {
-			const key = uuidv4();
-			const product = await stripe.products.retrieve(
-				item.price.product as string,
-			);
-			const { current_period_end } = item;
-			await eventBridgeClient.send(
-				new PutEventsCommand({
-					Entries: [
-						{
-							Source: "service.stripe",
-							DetailType: "SubscriptionCreated",
-							EventBusName: eventBusName,
-							Detail: JSON.stringify({
-								licenseKey: key,
-								stripeSubscriptionId: stripeSubscriptionId,
-								customerId: customer,
-								customerEmail: email,
-								productId: product.id,
-								productName: product.name,
-								priceId: item.price.id,
-								quantity: item.quantity,
-								status: status,
-								createdAt: created,
-								cancelAtPeriodEnd: cancel_at_period_end,
-								trialStart: trial_start,
-								trialEnd: trial_end,
-								expiresAt: current_period_end,
-								metadata: item.metadata,
-							}),
-						},
-					],
-				}),
-			);
-		}
-	};
+    const getCustomer = async () => {
+      try {
+        return await stripe.customers.retrieve(subscription.customer);
+      } catch (error) {
+        console.error("Error retrieving customer:", error);
+        throw new Error(
+          `Failed to retrieve customer: ${(error as Error).message}`,
+        );
+      }
+    };
+
+    const customer = await getCustomer();
+
+    const createEventPromise = async (
+      item: SubscriptionCreatedEvent["items"]["data"][0],
+    ) => {
+      const getProduct = async () => {
+        try {
+          return await stripe.products.retrieve(item.price.product);
+        } catch (error) {
+          console.error("Error retrieving product:", error);
+          throw new Error(
+            `Failed to retrieve product: ${(error as Error).message}`,
+          );
+        }
+      };
+
+      const product = await getProduct();
+
+      const { current_period_end } = item;
+      const key = uuidv4();
+
+      const sendEvent = async () => {
+        try {
+          await eventBridgeClient.send(
+            new PutEventsCommand({
+              Entries: [
+                {
+                  Source: "service.stripe",
+                  DetailType: "SubscriptionCreated",
+                  EventBusName: eventBusName,
+                  Detail: JSON.stringify({
+                    licenseKey: key,
+                    stripeSubscriptionId: subscription.id,
+                    customerId: subscription.customer,
+                    customerEmail: customer.email,
+                    productId: product.id,
+                    productName: product.name,
+                    priceId: item.price.id,
+                    quantity: item.quantity,
+                    status: subscription.status,
+                    createdAt: subscription.created,
+                    cancelAtPeriodEnd: subscription.cancel_at_period_end,
+                    ...(subscription.trial_start && {
+                      trialStart: subscription.trial_start,
+                    }),
+                    ...(subscription.trial_end && {
+                      trialEnd: subscription.trial_end,
+                    }),
+                    expiresAt: current_period_end,
+                    metadata: item.metadata,
+                  }),
+                },
+              ],
+            }),
+          );
+        } catch (error) {
+          console.error("Error sending event to EventBridge:", error);
+          throw new Error(
+            `Failed to send event to EventBridge: ${(error as Error).message}`,
+          );
+        }
+      };
+
+      await sendEvent();
+    };
+
+    const eventPromises = subscription.items.data.map(createEventPromise);
+
+    try {
+      await Promise.all(eventPromises);
+    } catch (error) {
+      console.error("Error in subscriptionCreated:", error);
+      throw error;
+    }
+  };

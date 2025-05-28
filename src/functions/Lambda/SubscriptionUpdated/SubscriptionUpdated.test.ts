@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { subscriptionUpdated } from "./SubscriptionUpdated";
-import type Stripe from "stripe";
 import { handleCancellation } from "./lib/handleCancellation/handleCancellation";
 import { handleUncancellation } from "./lib/handleUncancellation/handleUncancellation";
+import type { SubscriptionUpdatedEvent } from "./SubscriptionUpdated.types";
 
 vi.mock("./lib/handleCancellation/handleCancellation");
 vi.mock("./lib/handleUncancellation/handleUncancellation");
@@ -13,29 +13,31 @@ const mockHandleUncancellation = vi.mocked(handleUncancellation);
 const eventBusArn = "arn:aws:events:region:account:event-bus/test";
 const eventBusSchedulerRoleArn = "arn:aws:iam::account:role/test";
 
-type SubscriptionEvent = {
-  id: string;
-  status: string;
-  cancel_at_period_end: boolean;
-  cancel_at: number | null;
-  previous_attributes: Record<string, unknown>;
-};
-
 const makeEvent = ({
   id = "sub_123",
   status = "active",
   cancel_at_period_end = false,
-  cancel_at = null,
-  previous_attributes = {},
-}: Partial<SubscriptionEvent> = {}) => {
+  cancel_at = 1234567890,
+  previousAttributes = {},
+}: Partial<SubscriptionUpdatedEvent> = {}) => {
   return {
-    object: {
-      id,
-      status,
-      cancel_at_period_end,
-      cancel_at,
+    items: {
+      data: [
+        {
+          id: "item_123",
+          price: { product: "product-1", id: "product-1-id" },
+          quantity: 1,
+          current_period_end: 1234567890,
+          metadata: {},
+        },
+      ],
     },
-    previous_attributes,
+    customer: "cus_123",
+    id: id,
+    status,
+    cancel_at_period_end,
+    cancel_at,
+    previousAttributes,
   };
 };
 
@@ -63,11 +65,9 @@ describe("subscriptionUpdated", () => {
 
   it("calls handleCancellation if cancel_at_period_end is true", async () => {
     const event = makeEvent({ cancel_at_period_end: true });
-    await subscriptionUpdated(dependencies)(
-      event as Stripe.CustomerSubscriptionUpdatedEvent.Data,
-    );
+    await subscriptionUpdated(dependencies)(event);
     expect(mockHandleCancellation).toHaveBeenCalledWith(
-      event.object,
+      event,
       schedulerClient,
       eventBusArn,
       eventBusSchedulerRoleArn,
@@ -77,11 +77,9 @@ describe("subscriptionUpdated", () => {
 
   it("calls handleCancellation if status is 'canceled'", async () => {
     const event = makeEvent({ status: "canceled" });
-    await subscriptionUpdated(dependencies)(
-      event as Stripe.CustomerSubscriptionUpdatedEvent.Data,
-    );
+    await subscriptionUpdated(dependencies)(event);
     expect(mockHandleCancellation).toHaveBeenCalledWith(
-      event.object,
+      event,
       schedulerClient,
       eventBusArn,
       eventBusSchedulerRoleArn,
@@ -92,13 +90,11 @@ describe("subscriptionUpdated", () => {
   it("calls handleUncancellation if cancel_at changed from value to null", async () => {
     const event = makeEvent({
       cancel_at: null,
-      previous_attributes: { cancel_at: 1234567890 },
+      previousAttributes: { cancel_at: 1234567890 },
     });
-    await subscriptionUpdated(dependencies)(
-      event as Stripe.CustomerSubscriptionUpdatedEvent.Data,
-    );
+    await subscriptionUpdated(dependencies)(event);
     expect(mockHandleUncancellation).toHaveBeenCalledWith(
-      event.object,
+      event,
       schedulerClient,
     );
     expect(mockHandleCancellation).not.toHaveBeenCalled();
@@ -107,13 +103,11 @@ describe("subscriptionUpdated", () => {
   it("calls handleUncancellation if cancel_at_period_end changed from true to false", async () => {
     const event = makeEvent({
       cancel_at_period_end: false,
-      previous_attributes: { cancel_at_period_end: true },
+      previousAttributes: { cancel_at_period_end: true },
     });
-    await subscriptionUpdated(dependencies)(
-      event as Stripe.CustomerSubscriptionUpdatedEvent.Data,
-    );
+    await subscriptionUpdated(dependencies)(event);
     expect(mockHandleUncancellation).toHaveBeenCalledWith(
-      event.object,
+      event,
       schedulerClient,
     );
     expect(mockHandleCancellation).not.toHaveBeenCalled();
@@ -122,13 +116,11 @@ describe("subscriptionUpdated", () => {
   it("logs update if no cancellation or uncancellation", async () => {
     const event = makeEvent();
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    await subscriptionUpdated(dependencies)(
-      event as Stripe.CustomerSubscriptionUpdatedEvent.Data,
-    );
+    await subscriptionUpdated(dependencies)(event);
     expect(mockHandleCancellation).not.toHaveBeenCalled();
     expect(mockHandleUncancellation).not.toHaveBeenCalled();
     expect(logSpy).toHaveBeenCalledWith(
-      `Subscription ${event.object.id} updated with status: ${event.object.status}`,
+      `Subscription ${event.id} updated with status: ${event.status}`,
     );
     logSpy.mockRestore();
   });
@@ -137,13 +129,11 @@ describe("subscriptionUpdated", () => {
     const event = makeEvent({ cancel_at_period_end: true });
     mockHandleCancellation.mockRejectedValueOnce(new Error("fail!"));
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    await expect(
-      subscriptionUpdated(dependencies)(
-        event as Stripe.CustomerSubscriptionUpdatedEvent.Data,
-      ),
-    ).rejects.toThrow("fail!");
+    await expect(subscriptionUpdated(dependencies)(event)).rejects.toThrow(
+      "fail!",
+    );
     expect(errorSpy).toHaveBeenCalledWith(
-      `Error processing subscription ${event.object.id}:`,
+      `Error processing subscription ${event.id}:`,
       expect.any(Error),
     );
     errorSpy.mockRestore();
