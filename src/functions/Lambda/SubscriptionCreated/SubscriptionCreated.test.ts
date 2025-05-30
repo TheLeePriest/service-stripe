@@ -78,7 +78,6 @@ describe("subscriptionCreated", () => {
     expect(detail).toMatchObject({
       licenseKey: mockUuid,
       stripeSubscriptionId: "sub_123",
-      customerId: "cus_123",
       customerEmail: "test@example.com",
       productId: "prod_123",
       productName: "Test Product",

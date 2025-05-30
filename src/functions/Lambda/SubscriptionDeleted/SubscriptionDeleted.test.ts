@@ -11,6 +11,9 @@ describe("subscriptionDeleted", () => {
     customers: {
       retrieve: mockRetrieve,
     },
+    products: {
+      retrieve: vi.fn(),
+    },
   };
   const mockEventBridgeClient = {
     send: mockEventBridgeSend,

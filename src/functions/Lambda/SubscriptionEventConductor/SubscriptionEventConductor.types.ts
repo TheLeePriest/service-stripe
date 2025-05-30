@@ -8,10 +8,12 @@ import type { Stripe } from "stripe";
 export type SubscriptionEventConductorDependencies = {
   stripe: {
     customers: {
-      retrieve: (id: string) => Promise<Stripe.Customer>;
+      retrieve: (
+        id: string,
+      ) => Promise<Stripe.Response<Stripe.Customer | Stripe.DeletedCustomer>>;
     };
     products: {
-      retrieve: (product: string) => Promise<Stripe.Product>;
+      retrieve: (id: string) => Promise<Stripe.Response<Stripe.Product>>;
     };
   };
   eventBridgeClient: {

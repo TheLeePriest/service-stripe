@@ -19,13 +19,14 @@ export const subscriptionDeleted =
       canceled_at,
       customer,
     } = event;
-
+    console.log(event, "subscriptionDeleted event received");
     try {
       const stripeCustomer = (await stripe.customers.retrieve(
         customer as string,
       )) as Stripe.Customer;
+      console.log(stripeCustomer, "stripeCustomer retrieved");
       const { email } = stripeCustomer;
-
+      console.log(status, "subscription status");
       if (status !== "canceled") {
         console.warn("Subscription is not canceled, skipping");
         return;

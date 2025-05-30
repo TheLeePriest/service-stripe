@@ -1,34 +1,34 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { handleCancellation } from "./handleCancellation";
-import { ConflictException } from "@aws-sdk/client-scheduler";
-import type Stripe from "stripe";
+import type { SubscriptionUpdatedEvent } from "../../SubscriptionUpdated.types";
 
-const mockSubscription = (overrides: Partial<Stripe.Subscription> = {}) => ({
+const mockEvent = {
   id: "sub_123",
-  customer: "cus_456",
-  status: "active",
+  cancel_at: 1234567890,
   cancel_at_period_end: true,
+  status: "active",
+  customer: "cus_123",
   items: {
     data: [
       {
         id: "item_1",
-        current_period_end: Math.floor(Date.now() / 1000) + 3600, // 1 hour in future
-      },
-      {
-        id: "item_2",
-        current_period_end: Math.floor(Date.now() / 1000) - 3600, // 1 hour in past
+        price: {
+          id: "price_123",
+          product: "prod_123",
+        },
+        quantity: 1,
+        current_period_end: 1234567890,
+        metadata: {},
       },
     ],
   },
-  ...overrides,
-});
+} satisfies SubscriptionUpdatedEvent;
 
-const eventBusArn = "arn:aws:events:region:account:event-bus/test";
-const roleArn = "arn:aws:iam::account:role/test";
+const eventBusName = "test-event-bus";
 
 describe("handleCancellation", () => {
   const sendMock = vi.fn();
-  const mockSchedulerClient = {
+  const mockEventBridgeClient = {
     send: sendMock,
   };
 
@@ -36,159 +36,57 @@ describe("handleCancellation", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.spyOn(console, "info").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
-  it("schedules cancellation for future period_end and skips past ones", async () => {
+  it("sends event for LicenseCancelled", async () => {
     sendMock.mockResolvedValueOnce({});
-    const subscription = mockSubscription();
-    await handleCancellation(
-      subscription as Stripe.Subscription,
-      mockSchedulerClient,
-      eventBusArn,
-      roleArn,
-    );
+    vi.setSystemTime(1134567890 * 1000);
+    await handleCancellation({
+      subscription: mockEvent,
+      eventBridgeClient: mockEventBridgeClient,
+      eventBusName,
+    });
 
     expect(sendMock).toHaveBeenCalledTimes(1);
-    expect(sendMock.mock.calls[0][0].input.Name).toBe(
-      `subscription-cancel-${subscription.id}-item_1`,
-    );
-    expect(console.warn).toHaveBeenCalledWith(
-      `Skipping ${subscription.id}/item_2: period end already passed`,
-    );
-  });
-
-  it("updates schedule if ConflictException is thrown", async () => {
-    sendMock
-      .mockRejectedValueOnce({ name: ConflictException.name })
-      .mockResolvedValueOnce({});
-    const subscription = mockSubscription({
-      items: {
-        object: "list",
-        has_more: false,
-        url: "/v1/subscription_items?subscription=sub_123",
-        data: [
-          {
-            id: "item_1",
-            object: "subscription_item",
-            created: Math.floor(Date.now() / 1000),
-            current_period_start: Math.floor(Date.now() / 1000) - 3600,
-            current_period_end: Math.floor(Date.now() / 1000) + 3600,
-            plan: {} as Stripe.Plan,
-            price: {} as Stripe.Price,
-            quantity: 1,
-            subscription: "sub_123",
-            metadata: {},
-            tax_rates: [],
-            discounts: [],
-          },
-        ],
-      },
-    });
-
-    await handleCancellation(
-      subscription as Stripe.Subscription,
-      mockSchedulerClient,
-      eventBusArn,
-      roleArn,
-    );
-
-    expect(sendMock).toHaveBeenCalledTimes(2);
-    expect(console.info).toHaveBeenCalledWith(
-      `Schedule subscription-cancel-${subscription.id}-item_1 exists, updating…`,
-    );
-    expect(console.info).toHaveBeenCalledWith(
-      `Updated subscription-cancel-${subscription.id}-item_1`,
-    );
-  });
-
-  it("throws if scheduling fails for any item", async () => {
-    sendMock.mockRejectedValueOnce(new Error("Some AWS error"));
-    const subscription = mockSubscription({
-      items: {
-        object: "list",
-        has_more: false,
-        url: "/v1/subscription_items?subscription=sub_123",
-        data: [
-          {
-            id: "item_1",
-            object: "subscription_item",
-            created: Math.floor(Date.now() / 1000),
-            current_period_start: Math.floor(Date.now() / 1000) - 3600,
-            current_period_end: Math.floor(Date.now() / 1000) + 3600,
-            plan: {} as Stripe.Plan,
-            price: {} as Stripe.Price,
-            quantity: 1,
-            subscription: "sub_123",
-            metadata: {},
-            tax_rates: [],
-            discounts: [],
-          },
-        ],
-      },
-    });
-
-    await expect(
-      handleCancellation(
-        subscription as Stripe.Subscription,
-        mockSchedulerClient,
-        eventBusArn,
-        roleArn,
-      ),
-    ).rejects.toThrow("1 subscription schedules failed");
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("Error scheduling"),
-      expect.any(Error),
-    );
   });
 
   it("does nothing if all items are in the past", async () => {
-    const subscription = mockSubscription({
+    const subscription = {
+      id: "sub_123",
+      cancel_at: 1234567890,
+      cancel_at_period_end: false,
+      status: "active",
+      customer: "cus_123",
       items: {
-        object: "list",
-        has_more: false,
-        url: "/v1/subscription_items?subscription=sub_123",
         data: [
           {
             id: "item_1",
-            object: "subscription_item",
-            created: Math.floor(Date.now() / 1000) - 200,
-            current_period_start: Math.floor(Date.now() / 1000) - 200,
-            current_period_end: Math.floor(Date.now() / 1000) - 100,
-            plan: {} as Stripe.Plan,
-            price: {} as Stripe.Price,
+            price: {
+              id: "price_123",
+              product: "prod_123", // ✅ must be a string
+            },
             quantity: 1,
-            subscription: "sub_123",
+            current_period_end: 1234567890,
             metadata: {},
-            tax_rates: [],
-            discounts: [],
-          },
-          {
-            id: "item_2",
-            object: "subscription_item",
-            created: Math.floor(Date.now() / 1000) - 300,
-            current_period_start: Math.floor(Date.now() / 1000) - 300,
-            current_period_end: Math.floor(Date.now() / 1000) - 200,
-            plan: {} as Stripe.Plan,
-            price: {} as Stripe.Price,
-            quantity: 1,
-            subscription: "sub_123",
-            metadata: {},
-            tax_rates: [],
-            discounts: [],
           },
         ],
       },
+    } satisfies SubscriptionUpdatedEvent;
+    vi.setSystemTime(1334567890 * 1000);
+
+    await handleCancellation({
+      subscription,
+      eventBridgeClient: mockEventBridgeClient,
+      eventBusName,
     });
 
-    await handleCancellation(
-      subscription as Stripe.Subscription,
-      mockSchedulerClient,
-      eventBusArn,
-      roleArn,
-    );
-
     expect(sendMock).not.toHaveBeenCalled();
-    expect(console.warn).toHaveBeenCalledTimes(2);
+    expect(console.warn).toHaveBeenCalledTimes(1);
   });
 });

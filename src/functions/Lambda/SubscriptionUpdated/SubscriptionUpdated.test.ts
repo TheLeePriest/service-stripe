@@ -50,6 +50,7 @@ describe("subscriptionUpdated", () => {
   const eventBridgeClient = {
     send: mockEventSend,
   };
+  const eventBusName = "test-event-bus";
 
   const dependencies = {
     eventBusArn,
@@ -63,27 +64,21 @@ describe("subscriptionUpdated", () => {
     vi.clearAllMocks();
   });
 
-  it("calls handleCancellation if cancel_at_period_end is true", async () => {
-    const event = makeEvent({ cancel_at_period_end: true });
+  it("does not call handleCancellation if cancel_at_period_end is false", async () => {
+    const event = makeEvent({ cancel_at_period_end: false });
     await subscriptionUpdated(dependencies)(event);
-    expect(mockHandleCancellation).toHaveBeenCalledWith(
-      event,
-      schedulerClient,
-      eventBusArn,
-      eventBusSchedulerRoleArn,
-    );
+    expect(mockHandleCancellation).not.toHaveBeenCalled();
     expect(mockHandleUncancellation).not.toHaveBeenCalled();
   });
 
-  it("calls handleCancellation if status is 'canceled'", async () => {
-    const event = makeEvent({ status: "canceled" });
+  it("calls handleCancellation if status is 'active' and cancel_at_period_end is true", async () => {
+    const event = makeEvent({ status: "active", cancel_at_period_end: true });
     await subscriptionUpdated(dependencies)(event);
-    expect(mockHandleCancellation).toHaveBeenCalledWith(
-      event,
-      schedulerClient,
-      eventBusArn,
-      eventBusSchedulerRoleArn,
-    );
+    expect(mockHandleCancellation).toHaveBeenCalledWith({
+      subscription: event,
+      eventBridgeClient,
+      eventBusName,
+    });
     expect(mockHandleUncancellation).not.toHaveBeenCalled();
   });
 

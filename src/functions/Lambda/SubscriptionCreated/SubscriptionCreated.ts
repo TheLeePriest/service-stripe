@@ -1,3 +1,4 @@
+import type Stripe from "stripe";
 import type {
   SubscriptionCreatedDependencies,
   SubscriptionCreatedEvent,
@@ -11,7 +12,9 @@ export const subscriptionCreated =
 
     const getCustomer = async () => {
       try {
-        return await stripe.customers.retrieve(subscription.customer);
+        return (await stripe.customers.retrieve(
+          subscription.customer,
+        )) as Stripe.Customer;
       } catch (error) {
         console.error("Error retrieving customer:", error);
         throw new Error(
@@ -27,7 +30,9 @@ export const subscriptionCreated =
     ) => {
       const getProduct = async () => {
         try {
-          return await stripe.products.retrieve(item.price.product);
+          return (await stripe.products.retrieve(
+            item.price.product,
+          )) as Stripe.Product;
         } catch (error) {
           console.error("Error retrieving product:", error);
           throw new Error(
@@ -53,7 +58,7 @@ export const subscriptionCreated =
                   Detail: JSON.stringify({
                     licenseKey: key,
                     stripeSubscriptionId: subscription.id,
-                    customerId: subscription.customer,
+                    stripeCustomerId: subscription.customer,
                     customerEmail: customer.email,
                     productId: product.id,
                     productName: product.name,

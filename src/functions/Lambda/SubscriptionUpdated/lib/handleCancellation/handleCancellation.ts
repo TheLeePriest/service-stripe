@@ -1,19 +1,12 @@
-import {
-  CreateScheduleCommand,
-  UpdateScheduleCommand,
-  type CreateScheduleCommandInput,
-  ConflictException,
-} from "@aws-sdk/client-scheduler";
-import type Stripe from "stripe";
-import type { SchedulerClient } from "../../../types/aws.types";
-import type { SubscriptionUpdatedEvent } from "../../SubscriptionUpdated.types";
+import type { HandleCancellationDependencies } from "./handleCancellation.type";
+import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 
-export const handleCancellation = async (
-  subscription: SubscriptionUpdatedEvent,
-  schedulerClient: SchedulerClient,
-  eventBusArn: string,
-  roleArn: string,
-) => {
+export const handleCancellation = async ({
+  subscription,
+  eventBridgeClient,
+  eventBusName,
+}: HandleCancellationDependencies) => {
+  console.log(subscription, "handleCancellation called");
   const now = Date.now();
   const { items } = subscription;
   const tasks = items.data.map(async (item) => {
@@ -25,36 +18,26 @@ export const handleCancellation = async (
       return Promise.resolve();
     }
 
-    const scheduleTime = new Date(endMs).toISOString().replace(/\.\d{3}Z$/, "");
-
-    const name = `subscription-cancel-${subscription.id}-${item.id}`;
-    const config: CreateScheduleCommandInput = {
-      Name: name,
-      ScheduleExpression: `at(${scheduleTime})`,
-      FlexibleTimeWindow: { Mode: "OFF" },
-      Target: {
-        Arn: eventBusArn,
-        RoleArn: roleArn,
-        Input: JSON.stringify({
-          customerId: subscription.customer,
-          subscriptionId: subscription.id,
-          status: subscription.status,
-          cancelAtPeriodEnd: subscription.cancel_at_period_end,
-        }),
-      },
-    };
-
     try {
-      await schedulerClient.send(new CreateScheduleCommand(config));
-      return console.info(`Scheduled ${name}`);
+      await eventBridgeClient.send(
+        new PutEventsCommand({
+          Entries: [
+            {
+              Source: "service.stripe",
+              DetailType: "LicenseCancelled",
+              EventBusName: eventBusName,
+              Detail: JSON.stringify({
+                subscriptionId: subscription.id,
+                stripeCustomerId: subscription.customer,
+                cancelAt: subscription.cancel_at,
+              }),
+            },
+          ],
+        }),
+      );
     } catch (err) {
-      if ((err as Error).name === ConflictException.name) {
-        console.info(`Schedule ${name} exists, updating…`);
-        return schedulerClient
-          .send(new UpdateScheduleCommand(config))
-          .then(() => console.info(`Updated ${name}`));
-      }
-      console.error(`Error scheduling ${name}:`, err);
+      console.error("Error sending LicenseCancelled event:", err);
+
       throw err;
     }
   });

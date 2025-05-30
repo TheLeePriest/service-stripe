@@ -7,7 +7,12 @@ import type Stripe from "stripe";
 export type SubscriptionDeletedDependencies = {
   stripe: {
     customers: {
-      retrieve: (id: string) => Promise<Stripe.Customer>;
+      retrieve: (
+        id: string,
+      ) => Promise<Stripe.Response<Stripe.Customer | Stripe.DeletedCustomer>>;
+    };
+    products: {
+      retrieve: (id: string) => Promise<Stripe.Response<Stripe.Product>>;
     };
   };
   eventBridgeClient: {

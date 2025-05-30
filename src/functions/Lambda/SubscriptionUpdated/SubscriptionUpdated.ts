@@ -8,9 +8,9 @@ import { handleUncancellation } from "./lib/handleUncancellation/handleUncancell
 
 export const subscriptionUpdated =
   ({
-    eventBusArn,
-    eventBusSchedulerRoleArn,
     schedulerClient,
+    eventBridgeClient,
+    eventBusName,
   }: SubscriptionUpdatedDependencies) =>
   async (event: SubscriptionUpdatedEvent) => {
     const {
@@ -24,12 +24,11 @@ export const subscriptionUpdated =
     try {
       if (isCancellation(cancel_at_period_end, status)) {
         console.log(`Subscription ${stripeSubscriptionId} is being canceled`);
-        await handleCancellation(
-          event,
-          schedulerClient,
-          eventBusArn,
-          eventBusSchedulerRoleArn,
-        );
+        await handleCancellation({
+          subscription: event,
+          eventBridgeClient,
+          eventBusName,
+        });
       } else if (
         isUncancellation(previousAttributes, cancel_at, cancel_at_period_end)
       ) {
@@ -52,7 +51,7 @@ export const subscriptionUpdated =
   };
 
 function isCancellation(cancelAtPeriodEnd: boolean, status: string): boolean {
-  return cancelAtPeriodEnd || status === "canceled";
+  return cancelAtPeriodEnd && status === "active";
 }
 
 function isUncancellation(
