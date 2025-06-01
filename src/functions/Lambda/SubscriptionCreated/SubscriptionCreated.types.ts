@@ -3,18 +3,10 @@ import type {
   PutEventsCommandOutput,
 } from "@aws-sdk/client-eventbridge";
 import type Stripe from "stripe";
+import type { StripeClient } from "../types/stripe.types";
 
 export type SubscriptionCreatedDependencies = {
-  stripe: {
-    customers: {
-      retrieve: (
-        id: string,
-      ) => Promise<Stripe.Response<Stripe.Customer | Stripe.DeletedCustomer>>;
-    };
-    products: {
-      retrieve: (id: string) => Promise<Stripe.Response<Stripe.Product>>;
-    };
-  };
+  stripe: StripeClient;
   uuidv4: () => string;
   eventBridgeClient: {
     send: (command: PutEventsCommand) => Promise<PutEventsCommandOutput>;
@@ -25,6 +17,7 @@ export type SubscriptionCreatedDependencies = {
 export type SubscriptionCreatedEvent = {
   items: {
     data: Array<{
+      id: string;
       price: { product: string; id: string };
       quantity: number;
       current_period_end: number;

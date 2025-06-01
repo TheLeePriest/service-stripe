@@ -4,6 +4,7 @@ import type {
 } from "@aws-sdk/client-eventbridge";
 import type Stripe from "stripe";
 import type { SchedulerClient } from "../types/aws.types";
+import type { StripeClient } from "../types/stripe.types";
 
 export type SubscriptionUpdatedDependencies = {
   eventBridgeClient: {
@@ -13,9 +14,8 @@ export type SubscriptionUpdatedDependencies = {
   eventBusArn: string;
   eventBusSchedulerRoleArn: string;
   schedulerClient: SchedulerClient;
+  stripe: StripeClient;
 };
-
-// service-stripe/src/functions/Lambda/SubscriptionUpdated/SubscriptionUpdated.types.ts
 
 export type SubscriptionUpdatedEvent = {
   items: {
@@ -27,10 +27,19 @@ export type SubscriptionUpdatedEvent = {
       metadata: Record<string, unknown>;
     }>;
   };
+  createdAt: number;
   customer: string;
   id: string;
   status: string;
   cancel_at_period_end: boolean;
   cancel_at?: number | null;
   previousAttributes?: Partial<Stripe.Subscription>;
+  trialStart?: number | null;
+  trialEnd?: number | null;
 };
+
+export type SubscriptionState =
+  | "QUANTITY_CHANGED"
+  | "CANCELLING"
+  | "UNCANCELLING"
+  | "OTHER_UPDATE";

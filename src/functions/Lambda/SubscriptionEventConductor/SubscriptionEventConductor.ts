@@ -9,7 +9,6 @@ import type {
 import type { SubscriptionCreatedEvent } from "../SubscriptionCreated/SubscriptionCreated.types";
 import type { SubscriptionUpdatedEvent } from "../SubscriptionUpdated/SubscriptionUpdated.types";
 import type { SubscriptionDeletedEvent } from "../SubscriptionDeleted/SubscriptionDeleted.types";
-import type Stripe from "stripe";
 
 export const subscriptionEventConductor =
   ({
@@ -38,6 +37,7 @@ export const subscriptionEventConductor =
                     : item.price.product.id;
               const quantityValue = item.quantity ?? 1;
               return {
+                id: item.id,
                 price: { product: productId, id: item.price.id },
                 quantity: quantityValue,
                 current_period_end: item.current_period_end,
@@ -86,6 +86,13 @@ export const subscriptionEventConductor =
               };
             }),
           },
+          createdAt: subscription.created,
+          ...(subscription.trial_start && {
+            trialStart: subscription.trial_start,
+          }),
+          ...(subscription.trial_end && {
+            trialEnd: subscription.trial_end,
+          }),
           customer: subscription.customer as string,
           id: subscription.id,
           status: subscription.status,
@@ -103,6 +110,7 @@ export const subscriptionEventConductor =
           eventBusSchedulerRoleArn,
           eventBusName,
           schedulerClient,
+          stripe,
         })(updatedEvent);
         break;
       }

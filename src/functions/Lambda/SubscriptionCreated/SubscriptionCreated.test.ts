@@ -14,6 +14,7 @@ describe("subscriptionCreated", () => {
   const stripeMock = {
     customers: { retrieve: mockRetrieveCustomer },
     products: { retrieve: mockRetrieveProduct },
+    subscriptions: { retrieve: vi.fn() },
   };
 
   const eventBridgeClientMock = { send: mockSend };
@@ -29,6 +30,7 @@ describe("subscriptionCreated", () => {
     items: {
       data: [
         {
+          id: "item_123",
           price: { product: "prod_123", id: "price_123" },
           quantity: 2,
           current_period_end: 1625097600,

@@ -8,6 +8,8 @@ const mockEvent = {
   cancel_at_period_end: true,
   status: "active",
   customer: "cus_123",
+  createdAt: 1234567890,
+
   items: {
     data: [
       {
@@ -63,6 +65,7 @@ describe("handleCancellation", () => {
       cancel_at_period_end: false,
       status: "active",
       customer: "cus_123",
+      createdAt: 1234567890,
       items: {
         data: [
           {

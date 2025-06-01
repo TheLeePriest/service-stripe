@@ -1,45 +1,64 @@
-import type Stripe from "stripe";
 import type {
   SubscriptionUpdatedEvent,
   SubscriptionUpdatedDependencies,
+  SubscriptionState,
 } from "./SubscriptionUpdated.types";
 import { handleCancellation } from "./lib/handleCancellation/handleCancellation";
 import { handleUncancellation } from "./lib/handleUncancellation/handleUncancellation";
+import { handleQuantityChange } from "./lib/handleQuantityChange/handleQuantityChange";
+import { determineSubscriptionState } from "./lib/determineSubscriptionState/determineSubscriptionState";
 
 export const subscriptionUpdated =
   ({
     schedulerClient,
     eventBridgeClient,
     eventBusName,
+    stripe,
   }: SubscriptionUpdatedDependencies) =>
   async (event: SubscriptionUpdatedEvent) => {
-    const {
-      id: stripeSubscriptionId,
-      status,
-      cancel_at_period_end,
-      cancel_at,
-      previousAttributes,
-    } = event;
+    const { id: stripeSubscriptionId, status } = event;
 
     try {
-      if (isCancellation(cancel_at_period_end, status)) {
-        console.log(`Subscription ${stripeSubscriptionId} is being canceled`);
-        await handleCancellation({
-          subscription: event,
-          eventBridgeClient,
-          eventBusName,
-        });
-      } else if (
-        isUncancellation(previousAttributes, cancel_at, cancel_at_period_end)
-      ) {
-        console.log(
-          `Subscription ${stripeSubscriptionId} has been un-canceled`,
-        );
-        await handleUncancellation(event, schedulerClient);
-      } else {
-        console.log(
-          `Subscription ${stripeSubscriptionId} updated with status: ${status}`,
-        );
+      const state = determineSubscriptionState(event);
+
+      switch (state) {
+        case "QUANTITY_CHANGED": {
+          await handleQuantityChange({
+            subscriptionId: event.id,
+            previousAttributes: event.previousAttributes,
+            subscription: event,
+            eventBridgeClient,
+            eventBusName,
+            stripe,
+          });
+          break;
+        }
+
+        case "CANCELLING":
+          await handleCancellation({
+            subscription: event,
+            eventBridgeClient,
+            eventBusName,
+          });
+          break;
+
+        case "UNCANCELLING":
+          await handleUncancellation(event, schedulerClient);
+          break;
+
+        case "OTHER_UPDATE":
+          console.log(
+            `Subscription ${stripeSubscriptionId} updated with status: ${status}`,
+          );
+          break;
+
+        default: {
+          const _exhaustiveCheck: never = state;
+          console.log(
+            `Unhandled subscription state for ${stripeSubscriptionId}`,
+          );
+          return _exhaustiveCheck;
+        }
       }
     } catch (error) {
       console.error(
@@ -49,19 +68,3 @@ export const subscriptionUpdated =
       throw error;
     }
   };
-
-function isCancellation(cancelAtPeriodEnd: boolean, status: string): boolean {
-  return cancelAtPeriodEnd && status === "active";
-}
-
-function isUncancellation(
-  previousAttributes: Partial<Stripe.Subscription> | undefined,
-  cancelAt: number | null | undefined,
-  cancelAtPeriodEnd: boolean,
-): boolean {
-  return (
-    (previousAttributes?.cancel_at !== undefined && cancelAt == null) ||
-    (previousAttributes?.cancel_at_period_end === true &&
-      cancelAtPeriodEnd === false)
-  );
-}

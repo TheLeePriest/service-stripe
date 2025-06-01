@@ -27,6 +27,9 @@ const baseDeps = {
     products: {
       retrieve: mockProductRetrieve,
     },
+    subscriptions: {
+      retrieve: vi.fn(),
+    },
   },
   eventBridgeClient: {
     send: mockEventBridgeSend,

@@ -4,18 +4,10 @@ import type {
 } from "@aws-sdk/client-eventbridge";
 import type { SchedulerClient } from "../types/aws.types";
 import type { Stripe } from "stripe";
+import type { StripeClient } from "../types/stripe.types";
 
 export type SubscriptionEventConductorDependencies = {
-  stripe: {
-    customers: {
-      retrieve: (
-        id: string,
-      ) => Promise<Stripe.Response<Stripe.Customer | Stripe.DeletedCustomer>>;
-    };
-    products: {
-      retrieve: (id: string) => Promise<Stripe.Response<Stripe.Product>>;
-    };
-  };
+  stripe: StripeClient;
   eventBridgeClient: {
     send: (command: PutEventsCommand) => Promise<PutEventsCommandOutput>;
   };

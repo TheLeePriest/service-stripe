@@ -38,6 +38,7 @@ const makeEvent = ({
     cancel_at_period_end,
     cancel_at,
     previousAttributes,
+    createdAt: 1234567890,
   };
 };
 
@@ -51,6 +52,14 @@ describe("subscriptionUpdated", () => {
     send: mockEventSend,
   };
   const eventBusName = "test-event-bus";
+  const mockCustomerRetrieve = vi.fn();
+  const mockProductRetrieve = vi.fn();
+  const mockSubscriptionRetrieve = vi.fn();
+  const stripe = {
+    customers: { retrieve: mockCustomerRetrieve },
+    products: { retrieve: mockProductRetrieve },
+    subscriptions: { retrieve: mockSubscriptionRetrieve },
+  };
 
   const dependencies = {
     eventBusArn,
@@ -58,6 +67,7 @@ describe("subscriptionUpdated", () => {
     schedulerClient,
     eventBusName: "test-event-bus",
     eventBridgeClient,
+    stripe,
   };
 
   beforeEach(() => {
