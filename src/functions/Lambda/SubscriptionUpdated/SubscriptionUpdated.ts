@@ -1,16 +1,15 @@
 import type {
   SubscriptionUpdatedEvent,
   SubscriptionUpdatedDependencies,
-  SubscriptionState,
 } from "./SubscriptionUpdated.types";
 import { handleCancellation } from "./lib/handleCancellation/handleCancellation";
 import { handleUncancellation } from "./lib/handleUncancellation/handleUncancellation";
 import { handleQuantityChange } from "./lib/handleQuantityChange/handleQuantityChange";
 import { determineSubscriptionState } from "./lib/determineSubscriptionState/determineSubscriptionState";
+import { handleRenewal } from "./lib/handleRenewal/handleRenewal";
 
 export const subscriptionUpdated =
   ({
-    schedulerClient,
     eventBridgeClient,
     eventBusName,
     stripe,
@@ -44,6 +43,15 @@ export const subscriptionUpdated =
 
         case "UNCANCELLING":
           await handleUncancellation(event, schedulerClient);
+          break;
+
+        case "RENEWED":
+          await handleRenewal({
+            subscription: event,
+            eventBridgeClient,
+            eventBusName,
+            stripe,
+          });
           break;
 
         case "OTHER_UPDATE":

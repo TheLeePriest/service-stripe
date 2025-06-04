@@ -434,7 +434,7 @@ export class ServiceStripeStack extends Stack {
         eventBus: targetEventBus,
         ruleName: `${serviceName}-send-quantity-change-stripe-rule-${stage}`,
         eventPattern: {
-          source: ["service.user"],
+          source: ["service.license"],
           detailType: ["LicenseCancelled", "LicenseUncancelled"],
         },
       },

@@ -24,6 +24,7 @@ export type SubscriptionUpdatedEvent = {
       price: { product: string; id: string };
       quantity: number;
       current_period_end: number;
+      current_period_start: number;
       metadata: Record<string, unknown>;
     }>;
   };
@@ -42,4 +43,5 @@ export type SubscriptionState =
   | "QUANTITY_CHANGED"
   | "CANCELLING"
   | "UNCANCELLING"
-  | "OTHER_UPDATE";
+  | "OTHER_UPDATE"
+  | "RENEWED";

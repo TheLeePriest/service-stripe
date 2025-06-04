@@ -81,6 +81,7 @@ export const subscriptionEventConductor =
                 price: { product: productId, id: item.price.id },
                 quantity: quantityValue,
                 current_period_end: item.current_period_end,
+                current_period_start: item.current_period_start,
                 metadata: item.metadata as Record<string, unknown>,
                 id: item.id,
               };

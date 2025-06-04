@@ -3,30 +3,42 @@ import type {
   SubscriptionState,
 } from "../../SubscriptionUpdated.types";
 
-export const determineSubscriptionState = (
+export function determineSubscriptionState(
   event: SubscriptionUpdatedEvent,
-): SubscriptionState => {
-  const { status, cancel_at_period_end, cancel_at, previousAttributes, items } =
-    event;
+): SubscriptionState {
+  const { status, cancel_at_period_end, previousAttributes } = event;
 
-  const currentQuantity = items.data[0]?.quantity;
-  const previousQuantity = previousAttributes?.items?.data?.[0]?.quantity;
+  const hasRenewed = event.items.data.some((item, index) => {
+    const prevItem = previousAttributes?.items?.data?.[index];
+    return (
+      prevItem && item.current_period_start !== prevItem.current_period_start
+    );
+  });
 
-  if (previousQuantity !== undefined && currentQuantity !== previousQuantity) {
-    return "QUANTITY_CHANGED";
-  }
-
-  if (cancel_at_period_end && status === "active") {
-    return "CANCELLING";
+  if (hasRenewed) {
+    return "RENEWED";
   }
 
   if (
-    (previousAttributes?.cancel_at !== undefined && cancel_at == null) ||
-    (previousAttributes?.cancel_at_period_end === true &&
-      cancel_at_period_end === false)
+    cancel_at_period_end &&
+    status === "active" &&
+    !previousAttributes?.cancel_at_period_end
   ) {
+    return "CANCELLING";
+  }
+
+  if (!cancel_at_period_end && previousAttributes?.cancel_at_period_end) {
     return "UNCANCELLING";
   }
 
+  const hasQuantityChanged = event.items.data.some((item, index) => {
+    const prevItem = previousAttributes?.items?.data?.[index];
+    return prevItem && item.quantity !== prevItem.quantity;
+  });
+
+  if (hasQuantityChanged) {
+    return "QUANTITY_CHANGED";
+  }
+
   return "OTHER_UPDATE";
-};
+}
