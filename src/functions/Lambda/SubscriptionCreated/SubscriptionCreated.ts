@@ -17,20 +17,36 @@ export const subscriptionCreated =
 
       const items = await Promise.all(
         subscription.items.data.map(async (item) => {
+          console.log(item, "item");
           const product = await stripe.products.retrieve(
             item.price.product as string,
           );
+          const priceData = await stripe.prices.retrieve(item.price.id);
+          console.log(priceData, "priceData");
+          console.log(product, " Product retrieved for item:", item.id);
           return {
             itemId: item.id,
             productId: product.id,
             productName: product.name,
             priceId: item.price.id,
+            priceData: {
+              unitAmount: priceData.unit_amount,
+              currency: priceData.currency,
+              recurring: priceData.recurring,
+              metadata: priceData.metadata,
+            },
             quantity: item.quantity,
             expiresAt: item.current_period_end,
             metadata: item.metadata,
           };
         }),
       );
+
+      console.log(
+        `Processing subscription ${subscription.id} for customer ${customer.id}`,
+      );
+
+      console.log(items, "Items processed for subscription:", subscription.id);
 
       await eventBridgeClient.send(
         new PutEventsCommand({

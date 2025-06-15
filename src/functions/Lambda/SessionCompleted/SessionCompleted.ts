@@ -39,7 +39,9 @@ export const sessionCompleted =
       }, {});
       const { organization = "" } = customFieldsObject;
       const customer = session.customer as Stripe.Customer;
-
+      console.log(customer);
+      const retrievedCustomer = await stripe.customers.retrieve(customer.id);
+      console.log(retrievedCustomer);
       const subscription = session.subscription as Stripe.Subscription;
       const planItem = subscription.items.data[0];
       const now = new Date().toISOString();

@@ -12,4 +12,7 @@ export type StripeClient = {
   subscriptions: {
     retrieve: (id: string) => Promise<Stripe.Response<Stripe.Subscription>>;
   };
+  prices: {
+    retrieve: (id: string) => Promise<Stripe.Response<Stripe.Price>>;
+  };
 };

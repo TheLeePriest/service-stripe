@@ -14,6 +14,9 @@ import {
   PolicyStatement,
   Effect,
 } from "aws-cdk-lib/aws-iam";
+import { Queue } from "aws-cdk-lib/aws-sqs";
+import { SqsQueue } from "aws-cdk-lib/aws-events-targets";
+import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 
 export class ServiceStripeStack extends Stack {
   constructor(scope: Construct, id: string, props: StripeStackProps) {
@@ -38,6 +41,35 @@ export class ServiceStripeStack extends Stack {
       },
     ).stringValue;
 
+    const stripeUsageDLQ = new Queue(
+      this,
+      `${serviceName}-usage-dlq-${stage}`,
+      {
+        queueName: `${serviceName}-usage-dlq-${stage}`,
+        removalPolicy:
+          stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+        visibilityTimeout: Duration.minutes(5),
+        retentionPeriod: Duration.days(14),
+      },
+    );
+
+    const stripeUsageQueue = new Queue(
+      this,
+      `${serviceName}-usage-queue-${stage}`,
+      {
+        queueName: `${serviceName}-usage-queue-${stage}`,
+        removalPolicy:
+          stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+        visibilityTimeout: Duration.minutes(5),
+        retentionPeriod: Duration.days(14),
+
+        deadLetterQueue: {
+          queue: stripeUsageDLQ,
+          maxReceiveCount: 3,
+        },
+      },
+    );
+
     const stripeEventBus = EventBus.fromEventBusArn(
       this,
       `${serviceName}-event-bus-${stage}`,
@@ -48,6 +80,65 @@ export class ServiceStripeStack extends Stack {
       this,
       `${serviceName}-target-event-bus-${stage}`,
       targetEventBusName,
+    );
+
+    new Rule(this, `${serviceName}-usage-rule`, {
+      eventBus: targetEventBus,
+      ruleName: `${serviceName}-usage-rule-${stage}`,
+      description: "Rule to capture Stripe usage events",
+      targets: [new SqsQueue(stripeUsageQueue)],
+      eventPattern: {
+        source: ["service.license"],
+        detailType: ["LicenseUsageRecorded"],
+      },
+    });
+
+    const sendUsageToStripeLambdaPath = path.join(
+      __dirname,
+      "../../src/functions/Lambda/SendUsageToStripe/SendUsageToStripe.handler.ts",
+    );
+
+    const sendUsageToStripeLogGroup = new LogGroup(
+      this,
+      `${serviceName}-send-usage-log-group-${stage}`,
+      {
+        logGroupName: `/aws/lambda/${serviceName}-send-usage-${stage}`,
+        retention: 7,
+        removalPolicy: RemovalPolicy.DESTROY,
+      },
+    );
+
+    const sendUsageToStripeLambda = new TSLambdaFunction(
+      this,
+      `${serviceName}-send-usage-lambda-${stage}`,
+      {
+        serviceName,
+        stage,
+        handlerName: "sendUsageToStripeHandler",
+        entryPath: sendUsageToStripeLambdaPath,
+        tsConfigPath,
+        functionName: `${serviceName}-send-usage-${stage}`,
+        customOptions: {
+          logGroup: sendUsageToStripeLogGroup,
+          timeout: Duration.seconds(30),
+          memorySize: 256,
+          environment: {
+            STRIPE_SECRET_KEY,
+          },
+        },
+      },
+    );
+
+    sendUsageToStripeLambda.tsLambdaFunction.addEventSource(
+      new SqsEventSource(stripeUsageQueue, {
+        batchSize: 25,
+        maxBatchingWindow: Duration.minutes(1),
+        reportBatchItemFailures: true,
+      }),
+    );
+
+    stripeUsageQueue.grantConsumeMessages(
+      sendUsageToStripeLambda.tsLambdaFunction,
     );
 
     const schedulerRole = new Role(
