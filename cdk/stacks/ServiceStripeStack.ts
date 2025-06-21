@@ -35,7 +35,7 @@ export class ServiceStripeStack extends Stack {
 
     const STRIPE_EVENT_BUS_ID = StringParameter.fromStringParameterAttributes(
       this,
-      `${serviceName}--event-bus-id-${stage}`,
+      `${serviceName}-event-bus-id-${stage}`,
       {
         parameterName: `/${stage}/stripe/event-bus-id`,
       },
