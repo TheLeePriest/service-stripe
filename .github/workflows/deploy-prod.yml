@@ -1,27 +1,23 @@
-name: Dev CI/CD Pipeline
+name: Prod CI/CD Pipeline
 
 permissions:
   id-token: write
   contents: read
 
 on:
-  push:
-    branches:
-      - main
-      
-  pull_request:
-
+  workflow_dispatch:
+    
 env:
   AWS_REGION: eu-west-2
   STACK_NAME: service-stripe
-  STAGE: dev
+  STAGE: prod
   TARGET_EVENT_BUS_NAME: service-eventbridge-event-bus
 
 jobs:
-  deploy-dev:
-    name: Deploy to AWS (Dev)
+  deploy-prod:
+    name: Deploy to AWS (Prod)
     runs-on: ubuntu-latest
-    environment: development
+    environment: production
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -37,20 +33,11 @@ jobs:
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Install AWS CDK
         run: npm install -g aws-cdk
 
-      - name: Deploy Stack
-        run: |
-          cdk deploy --require-approval never || {
-            echo '❌ Deployment failed. Checking rollback options...';
-            if [ "$AUTO_ROLLBACK" == "yes" ]; then
-              echo '🔄 Rolling back...';
-              aws cloudformation rollback-stack --stack-name ${STACK_NAME}
-            else
-              echo '🛑 Manual rollback required!';
-            fi
-          }
+      - name: Deploy Stack to Production
+        run: cdk deploy --require-approval never
