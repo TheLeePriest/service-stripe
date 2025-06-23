@@ -1,7 +1,12 @@
 import type { Construct } from "constructs";
 import { Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
 import type { StripeStackProps } from "../types/stacks.types";
-import { AttributeType, StreamViewType, Table } from "aws-cdk-lib/aws-dynamodb";
+import {
+  AttributeType,
+  BillingMode,
+  StreamViewType,
+  Table,
+} from "aws-cdk-lib/aws-dynamodb";
 import { TSLambdaFunction } from "the-ldk";
 import path from "node:path";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
@@ -161,6 +166,7 @@ export class ServiceStripeStack extends Stack {
     const productsTable = new Table(this, `${serviceName}-products-${stage}`, {
       tableName: `stripe-products-${stage}`,
       partitionKey: { name: "PK", type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
       sortKey: { name: "SK", type: AttributeType.STRING },
       stream: StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy:
