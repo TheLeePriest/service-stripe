@@ -2,6 +2,7 @@ import type {
 	PutEventsCommand,
 	PutEventsCommandOutput,
 } from "@aws-sdk/client-eventbridge";
+import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type Stripe from "stripe";
 
 export type SessionCompletedDependencies = {
@@ -10,4 +11,6 @@ export type SessionCompletedDependencies = {
 		send: (command: PutEventsCommand) => Promise<PutEventsCommandOutput>;
 	};
 	eventBusName: string;
+	dynamoDBClient: DynamoDBClient;
+	idempotencyTableName: string;
 };

@@ -24,18 +24,29 @@ const mockSchedulerClient = {
   send: mockSend,
 };
 
+const mockLogger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  logUsageEvent: vi.fn(),
+  logStripeEvent: vi.fn(),
+};
+
 const makeSubscription = (itemIds: string[]): SubscriptionUpdatedEvent => ({
   id: "sub_123",
   customer: "cus_123",
   status: "active",
   cancel_at_period_end: false,
+  createdAt: 1234567890,
   items: {
     data: itemIds.map((id) => ({
       id,
       price: { product: "prod_123", id: "price_123" },
       quantity: 1,
       current_period_end: 1234567890,
-      metadata: {},
+      current_period_start: 1234567890,
+      metadata: {} as Record<string, unknown>,
     })),
   },
 });
@@ -49,7 +60,7 @@ describe("handleUncancellation", () => {
     mockSend.mockResolvedValue({});
     const subscription = makeSubscription(["item_1", "item_2"]);
 
-    await handleUncancellation(subscription, mockSchedulerClient);
+    await handleUncancellation(subscription, mockSchedulerClient, mockLogger);
 
     expect(mockSend).toHaveBeenCalledTimes(2);
     expect(DeleteScheduleCommand).toHaveBeenCalledWith({
@@ -66,30 +77,24 @@ describe("handleUncancellation", () => {
     mockSend.mockResolvedValueOnce({});
     const subscription = makeSubscription(["item_1", "item_2"]);
 
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    await handleUncancellation(subscription, mockSchedulerClient);
+    await handleUncancellation(subscription, mockSchedulerClient, mockLogger);
 
-    expect(logSpy).toHaveBeenCalledWith(
-      "Schedule subscription-cancel-sub_123 not found; skipping.",
-    );
-    logSpy.mockRestore();
+    expect(mockLogger.info).toHaveBeenCalledWith("Schedule not found, skipping", {
+      scheduleName: "subscription-cancel-sub_123",
+    });
   });
 
   it("throws and logs error for other exceptions", async () => {
-    const error = { name: "OtherError", message: "fail" };
+    const error = new Error("fail");
     mockSend.mockRejectedValueOnce(error);
     const subscription = makeSubscription(["item_1"]);
 
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
     await expect(
-      handleUncancellation(subscription, mockSchedulerClient),
+      handleUncancellation(subscription, mockSchedulerClient, mockLogger),
     ).rejects.toEqual(error);
-    expect(errorSpy).toHaveBeenCalledWith(
-      "Error deleting schedule subscription-cancel-sub_123:",
-      error,
-    );
-
-    errorSpy.mockRestore();
+    expect(mockLogger.error).toHaveBeenCalledWith("Error deleting schedule", {
+      scheduleName: "subscription-cancel-sub_123",
+      error: "fail",
+    });
   });
 });

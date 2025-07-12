@@ -3,9 +3,10 @@ import type {
   LicenseQuantityChange,
   SendQuantityChangeToStripeDependencies,
 } from "./SendQuantityChangeToStripe.types";
+import type { Logger } from "../types/utils.types";
 
 export const sendQuantityChangeToStripe =
-  ({ stripeClient }: SendQuantityChangeToStripeDependencies) =>
+  ({ stripeClient, logger }: SendQuantityChangeToStripeDependencies & { logger: Logger }) =>
   async (
     event: EventBridgeEvent<
       "LicenseCancelled" | "LicenseUncancelled",
@@ -16,15 +17,16 @@ export const sendQuantityChangeToStripe =
     const quantityChangeType = event["detail-type"];
     const quantityChange = quantityChangeType === "LicenseUncancelled" ? 1 : -1;
     const { itemId, stripeSubscriptionId } = detail;
-    console.log(
-      `${quantityChangeType} event for license with details:`,
+    
+    logger.info("Processing license quantity change event", {
+      eventType: quantityChangeType,
       detail,
-    );
+    });
 
     try {
       const subscription =
         await stripeClient.subscriptions.retrieve(stripeSubscriptionId);
-      console.log(JSON.stringify(subscription), "Retrieved subscription");
+      logger.debug("Retrieved subscription", { subscription });
       const subscriptionQuantity = subscription.items.data.find(
         (item) => item.id === itemId,
       )?.quantity;
@@ -34,9 +36,11 @@ export const sendQuantityChangeToStripe =
           `Subscription item with id ${itemId} not found or quantity is undefined`,
         );
       }
-      console.log(
-        `Current quantity for item ${itemId} is ${subscriptionQuantity}`,
-      );
+      logger.info("Current quantity for item", {
+        itemId,
+        currentQuantity: subscriptionQuantity,
+      });
+      
       await stripeClient.subscriptions.update(stripeSubscriptionId, {
         items: [
           {
@@ -44,9 +48,23 @@ export const sendQuantityChangeToStripe =
             quantity: subscriptionQuantity + quantityChange,
           },
         ],
+      }, {
+        idempotencyKey: `quantity-change-${stripeSubscriptionId}-${itemId}-${Date.now()}`,
+      });
+
+      logger.info("Successfully updated subscription quantity", {
+        itemId,
+        stripeSubscriptionId,
+        newQuantity: subscriptionQuantity + quantityChange,
+        changeType: quantityChangeType,
       });
     } catch (error) {
-      console.log(`Error processing ${quantityChangeType}:`, error);
+      logger.error("Error processing license quantity change", { 
+        eventType: quantityChangeType,
+        error: error instanceof Error ? error.message : String(error),
+        itemId,
+        stripeSubscriptionId,
+      });
       throw new Error(`Failed to process ${quantityChangeType}`);
     }
   };

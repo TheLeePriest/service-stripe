@@ -1,0 +1,80 @@
+name: Automated Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Build project
+        run: npm run build
+
+      - name: Validate commits
+        run: npx bumper validate
+
+      - name: Generate changelog
+        run: npx bumper generate
+
+      - name: Publish to NPM
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref_name }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false
+
+      - name: Update release notes
+        run: |
+          # Extract the latest changelog entry
+          CHANGELOG_CONTENT=$(cat CHANGELOG.md)
+          LATEST_ENTRY=$(echo "$CHANGELOG_CONTENT" | sed -n '/^## [\'${{ github.ref_name }}'\']/,/^## \[/p' | sed '\$d')
+
+          # Update the GitHub release with formatted content
+          gh api \
+            --method PATCH \
+            /repos/${{ github.repository }}/releases/latest \
+            --field body="$LATEST_ENTRY"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify release
+        run: |
+          echo "🎉 Release ${{ github.ref_name }} has been published!"
+          echo "📦 NPM: https://www.npmjs.com/package/${{ github.repository }}"
+          echo "🏷️ GitHub: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref }}"

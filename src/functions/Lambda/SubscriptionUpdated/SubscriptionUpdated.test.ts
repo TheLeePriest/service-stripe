@@ -28,7 +28,8 @@ const makeEvent = ({
           price: { product: "product-1", id: "product-1-id" },
           quantity: 1,
           current_period_end: 1234567890,
-          metadata: {},
+          current_period_start: 1234567890,
+          metadata: {} as Record<string, unknown>,
         },
       ],
     },
@@ -59,6 +60,16 @@ describe("subscriptionUpdated", () => {
     customers: { retrieve: mockCustomerRetrieve },
     products: { retrieve: mockProductRetrieve },
     subscriptions: { retrieve: mockSubscriptionRetrieve },
+    prices: { list: vi.fn(), retrieve: vi.fn() },
+  };
+
+  const mockLogger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    logUsageEvent: vi.fn(),
+    logStripeEvent: vi.fn(),
   };
 
   const dependencies = {
@@ -68,6 +79,7 @@ describe("subscriptionUpdated", () => {
     eventBusName: "test-event-bus",
     eventBridgeClient,
     stripe,
+    logger: mockLogger,
   };
 
   beforeEach(() => {
@@ -88,6 +100,7 @@ describe("subscriptionUpdated", () => {
       subscription: event,
       eventBridgeClient,
       eventBusName,
+      logger: mockLogger,
     });
     expect(mockHandleUncancellation).not.toHaveBeenCalled();
   });
@@ -101,6 +114,7 @@ describe("subscriptionUpdated", () => {
     expect(mockHandleUncancellation).toHaveBeenCalledWith(
       event,
       schedulerClient,
+      mockLogger,
     );
     expect(mockHandleCancellation).not.toHaveBeenCalled();
   });
@@ -114,33 +128,31 @@ describe("subscriptionUpdated", () => {
     expect(mockHandleUncancellation).toHaveBeenCalledWith(
       event,
       schedulerClient,
+      mockLogger,
     );
     expect(mockHandleCancellation).not.toHaveBeenCalled();
   });
 
   it("logs update if no cancellation or uncancellation", async () => {
     const event = makeEvent();
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await subscriptionUpdated(dependencies)(event);
     expect(mockHandleCancellation).not.toHaveBeenCalled();
     expect(mockHandleUncancellation).not.toHaveBeenCalled();
-    expect(logSpy).toHaveBeenCalledWith(
-      `Subscription ${event.id} updated with status: ${event.status}`,
-    );
-    logSpy.mockRestore();
+    expect(mockLogger.info).toHaveBeenCalledWith("Subscription updated", {
+      subscriptionId: event.id,
+      status: event.status,
+    });
   });
 
   it("logs and throws on error", async () => {
     const event = makeEvent({ cancel_at_period_end: true });
     mockHandleCancellation.mockRejectedValueOnce(new Error("fail!"));
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     await expect(subscriptionUpdated(dependencies)(event)).rejects.toThrow(
       "fail!",
     );
-    expect(errorSpy).toHaveBeenCalledWith(
-      `Error processing subscription ${event.id}:`,
-      expect.any(Error),
-    );
-    errorSpy.mockRestore();
+    expect(mockLogger.error).toHaveBeenCalledWith("Error processing subscription", {
+      subscriptionId: event.id,
+      error: "fail!",
+    });
   });
 });

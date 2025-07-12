@@ -1,14 +1,23 @@
 import type Stripe from "stripe";
 import type { SessionCompletedDependencies } from "./SessionCompleted.types";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import type { Logger } from "../types/utils.types";
+import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 
 export const sessionCompleted =
-  ({ stripe, eventBridgeClient, eventBusName }: SessionCompletedDependencies) =>
+  ({ stripe, eventBridgeClient, eventBusName, logger, dynamoDBClient, idempotencyTableName }: SessionCompletedDependencies & { 
+    logger: Logger;
+    dynamoDBClient: DynamoDBClient;
+    idempotencyTableName: string;
+  }) =>
   async (event: Stripe.CheckoutSessionCompletedEvent.Data) => {
     const { object } = event;
 
+    logger.logStripeEvent("checkout.session.completed", event as unknown as Record<string, unknown>);
+
     if (!object) {
-      console.warn("Missing session data, skipping");
+      logger.warn("Missing session data, skipping", { event });
       return;
     }
 
@@ -18,33 +27,47 @@ export const sessionCompleted =
     });
 
     const { customer_details: customerDetails } = session;
+    const customer = session.customer as Stripe.Customer;
+    const subscription = session.subscription as Stripe.Subscription;
+
+    if (!customer || !subscription) {
+      logger.warn("Missing customer or subscription data, skipping", { sessionId });
+      return;
+    }
+
+    const email = customerDetails?.email || customer.email;
+    const organization = customerDetails?.name || customer.name || "";
+    const now = new Date().toISOString();
+
+    // Generate idempotency key for customer creation
+    const eventId = generateEventId("customer-created", customer.id);
+    
+    // Check idempotency
+    const idempotencyResult = await ensureIdempotency(
+      { dynamoDBClient, tableName: idempotencyTableName, logger },
+      eventId,
+      { 
+        customerId: customer.id,
+        subscriptionId: subscription.id,
+        email,
+        organization
+      }
+    );
+
+    if (idempotencyResult.isDuplicate) {
+      logger.info("Customer creation already processed, skipping", { 
+        customerId: customer.id,
+        eventId 
+      });
+      return;
+    }
+
     try {
-      if (!customerDetails) {
-        console.warn("Missing customer details, skipping");
-        throw new Error("Missing customer details");
-      }
-
-      const { email } = customerDetails;
-
-      if (!email) {
-        console.warn("Missing email, skipping");
-        throw new Error("Missing email");
-      }
-
-      const customFieldsObject = session.custom_fields.reduce<
-        Record<string, string>
-      >((acc, field) => {
-        acc[field.key] = field.text?.value ?? "";
-        return acc;
-      }, {});
-      const { organization = "" } = customFieldsObject;
-      const customer = session.customer as Stripe.Customer;
-      console.log(customer);
-      const retrievedCustomer = await stripe.customers.retrieve(customer.id);
-      console.log(retrievedCustomer);
-      const subscription = session.subscription as Stripe.Subscription;
       const planItem = subscription.items.data[0];
-      const now = new Date().toISOString();
+      if (!planItem) {
+        logger.warn("No plan item found in subscription, skipping", { subscriptionId: subscription.id });
+        return;
+      }
 
       await eventBridgeClient.send(
         new PutEventsCommand({
@@ -81,8 +104,17 @@ export const sessionCompleted =
           ],
         }),
       );
+
+      logger.info("Customer created event sent to EventBridge", {
+        customerId: customer.id,
+        subscriptionId: subscription.id,
+        email,
+      });
     } catch (error) {
-      console.error("Error sending event to EventBridge:", error);
+      logger.error("Error sending event to EventBridge", { 
+        error: error instanceof Error ? error.message : String(error),
+        sessionId,
+      });
       throw new Error("Failed to send event to EventBridge");
     }
   };

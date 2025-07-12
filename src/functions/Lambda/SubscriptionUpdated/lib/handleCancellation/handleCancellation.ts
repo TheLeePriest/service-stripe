@@ -1,21 +1,47 @@
-import type Stripe from "stripe";
+import {
+  type EventBridgeClient,
+  PutEventsCommand,
+} from "@aws-sdk/client-eventbridge";
+import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type { HandleCancellationDependencies } from "./handleCancellation.type";
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import type { Logger } from "../../../types/utils.types";
+import { ensureIdempotency, generateEventId } from "../../../lib/idempotency";
+import type Stripe from "stripe";
 
 export const handleCancellation = async ({
   subscription,
   eventBridgeClient,
   eventBusName,
-}: HandleCancellationDependencies) => {
-  console.log(`Handling cancellation for subscription ${subscription.id}`);
-  const now = Date.now();
+  logger,
+  dynamoDBClient,
+  idempotencyTableName,
+}: HandleCancellationDependencies & { 
+  logger: Logger;
+  dynamoDBClient: DynamoDBClient;
+  idempotencyTableName: string;
+}) => {
+  logger.info("Handling cancellation for subscription", { subscriptionId: subscription.id });
 
-  // Check if the subscription has already ended
-  const latestEndDate = Math.max(
-    ...subscription.items.data.map((item) => item.current_period_end * 1000),
+  // Generate idempotency key for cancellation
+  const eventId = generateEventId("subscription-cancelled", subscription.id);
+  
+  // Check idempotency
+  const idempotencyResult = await ensureIdempotency(
+    { dynamoDBClient, tableName: idempotencyTableName, logger },
+    eventId,
+    { 
+      subscriptionId: subscription.id, 
+      customerId: subscription.customer,
+      cancelAt: subscription.cancel_at,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end
+    }
   );
-  if (latestEndDate <= now) {
-    console.warn(`Skipping ${subscription.id}: subscription has already ended`);
+
+  if (idempotencyResult.isDuplicate) {
+    logger.info("Subscription cancellation already processed, skipping", { 
+      subscriptionId: subscription.id,
+      eventId 
+    });
     return;
   }
 
@@ -45,14 +71,12 @@ export const handleCancellation = async ({
         ],
       }),
     );
-    console.log(
-      `Sent SubscriptionCancelled event for subscription ${subscription.id}`,
-    );
+    logger.info("Sent SubscriptionCancelled event", { subscriptionId: subscription.id });
   } catch (err) {
-    console.error(
-      `Error sending SubscriptionCancelled event for subscription ${subscription.id}:`,
-      err,
-    );
+    logger.error("Error sending SubscriptionCancelled event", { 
+      subscriptionId: subscription.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
     throw err;
   }
 };

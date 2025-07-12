@@ -4,6 +4,8 @@ import type {
   PutEventsCommand,
   PutEventsCommandOutput,
 } from "@aws-sdk/client-eventbridge";
+import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import type { Logger } from "../../../../types/utils.types";
 
 export type SendQuantityChangeEvents = {
   eventBridgeClient: {
@@ -14,4 +16,7 @@ export type SendQuantityChangeEvents = {
   customer: Stripe.Customer;
   item: Stripe.SubscriptionItem;
   quantityDifference: number;
+  logger: Logger;
+  dynamoDBClient: DynamoDBClient;
+  idempotencyTableName: string;
 };

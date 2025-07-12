@@ -9,6 +9,7 @@ import type {
 import type { SubscriptionCreatedEvent } from "../SubscriptionCreated/SubscriptionCreated.types";
 import type { SubscriptionUpdatedEvent } from "../SubscriptionUpdated/SubscriptionUpdated.types";
 import type { SubscriptionDeletedEvent } from "../SubscriptionDeleted/SubscriptionDeleted.types";
+import type { Logger } from "../types/utils.types";
 
 export const subscriptionEventConductor =
   ({
@@ -19,10 +20,16 @@ export const subscriptionEventConductor =
     eventBusArn,
     eventBusSchedulerRoleArn,
     schedulerClient,
-  }: SubscriptionEventConductorDependencies) =>
+    logger,
+  }: SubscriptionEventConductorDependencies & { logger: Logger }) =>
   async (event: EventBridgeEvent<string, StripeEventBridgeDetail>) => {
     const stripeEvent = event.detail;
     const subscription = stripeEvent.data.object;
+
+    logger.info("Processing subscription event", {
+      eventType: stripeEvent.type,
+      subscriptionId: subscription.id,
+    });
 
     switch (stripeEvent.type) {
       case "customer.subscription.created": {
@@ -62,6 +69,7 @@ export const subscriptionEventConductor =
           uuidv4,
           eventBridgeClient,
           eventBusName,
+          logger,
         })(createdEvent);
         break;
       }
@@ -112,6 +120,7 @@ export const subscriptionEventConductor =
           eventBusName,
           schedulerClient,
           stripe,
+          logger,
         })(updatedEvent);
         break;
       }
@@ -124,13 +133,16 @@ export const subscriptionEventConductor =
           ended_at: subscription.ended_at ?? undefined,
           canceled_at: subscription.canceled_at ?? undefined,
         };
-        await subscriptionDeleted({ stripe, eventBridgeClient, eventBusName })(
-          deletedEvent,
-        );
+        await subscriptionDeleted({ 
+          stripe, 
+          eventBridgeClient, 
+          eventBusName,
+          logger,
+        })(deletedEvent);
         break;
       }
 
       default:
-        console.log(`Unhandled event type: ${stripeEvent.type}`);
+        logger.warn("Unhandled event type", { eventType: stripeEvent.type });
     }
   };

@@ -31,6 +31,10 @@ export function determineSubscriptionState(
     return "UNCANCELLING";
   }
 
+  if (event.cancel_at === null && previousAttributes?.cancel_at) {
+    return "UNCANCELLING";
+  }
+
   const hasQuantityChanged = event.items.data.some((item, index) => {
     const prevItem = previousAttributes?.items?.data?.[index];
     return prevItem && item.quantity !== prevItem.quantity;

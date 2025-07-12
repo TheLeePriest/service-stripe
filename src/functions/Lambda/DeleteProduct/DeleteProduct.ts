@@ -24,6 +24,7 @@ export const deleteProduct =
 		stripe,
 		apiId,
 		productsTableName,
+		logger,
 	}: DeleteProductDependencies) =>
 	async (event: EventBridgeEvent<"price.deleted", PriceDeleted>) => {
 		const { detail } = event;
@@ -31,8 +32,10 @@ export const deleteProduct =
 		const price = event.detail.data.object;
 		const productId = price.product;
 
+		logger.logStripeEvent("price.deleted", detail as unknown as Record<string, unknown>);
+
 		if (!priceDeletedData) {
-			console.warn("Missing price data, skipping");
+			logger.warn("Missing price data, skipping", { detail });
 			return;
 		}
 
@@ -70,10 +73,15 @@ export const deleteProduct =
 					ReturnValues: "ALL_NEW",
 				}),
 			);
+
+			logger.info("Product updated successfully", {
+				productId: productId as string,
+				priceId: price.id,
+			});
 		} catch (error) {
 			const { code, statusCode } = error as Stripe.StripeRawError;
 			if (code === "resource_missing" || statusCode === 404) {
-				console.log("Product not found in Stripe:", productId);
+				logger.info("Product not found in Stripe", { productId });
 				const productItemResponse = (await dynamoDBClient.send(
 					new QueryCommand({
 						TableName: productsTableName,
@@ -86,7 +94,7 @@ export const deleteProduct =
 
 				const productItems = productItemResponse.Items;
 				if (!productItems || productItems.length === 0) {
-					console.log("Product not found in DynamoDB:", productId);
+					logger.info("Product not found in DynamoDB", { productId });
 					return;
 				}
 				const productItem = productItems[0];
@@ -128,10 +136,18 @@ export const deleteProduct =
 							usagePlanId: productItem.usagePlanId?.S as string,
 						}),
 					);
-					console.log("Usage plan deleted:", existingPlan.id);
+					logger.info("Usage plan deleted", { 
+						usagePlanId: existingPlan.id,
+						productId: productId as string,
+					});
 					return;
 				}
 				return;
 			}
+			logger.error("Failed to delete product", {
+				productId: productId as string,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			throw error;
 		}
 	};

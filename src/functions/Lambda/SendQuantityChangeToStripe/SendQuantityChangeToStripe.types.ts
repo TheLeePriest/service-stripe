@@ -11,6 +11,7 @@ export type SendQuantityChangeToStripeDependencies = {
             quantity: number;
           }>;
         },
+        options?: { idempotencyKey?: string }
       ) => Promise<Stripe.Response<Stripe.Subscription>>;
       retrieve: (id: string) => Promise<Stripe.Response<Stripe.Subscription>>;
     };

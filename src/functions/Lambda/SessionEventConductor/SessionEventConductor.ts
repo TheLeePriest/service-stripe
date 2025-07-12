@@ -5,6 +5,7 @@ import type {
 	PutEventsCommandOutput,
 } from "@aws-sdk/client-eventbridge";
 import { sessionCompleted } from "../SessionCompleted/SessionCompleted";
+import type { Logger } from "../types/utils.types";
 
 type SessionEventConductorDependencies = {
 	stripe: Stripe;
@@ -12,6 +13,7 @@ type SessionEventConductorDependencies = {
 		send: (command: PutEventsCommand) => Promise<PutEventsCommandOutput>;
 	};
 	eventBusName: string;
+	logger: Logger;
 };
 
 type StripeEventBridgeDetail = {
@@ -36,10 +38,16 @@ export const sessionEventConductor =
 		stripe,
 		eventBridgeClient,
 		eventBusName,
+		logger,
 	}: SessionEventConductorDependencies) =>
 	async (event: EventBridgeEvent<string, StripeEventBridgeDetail>) => {
 		const stripeEvent = event.detail;
 		const session = stripeEvent.data;
+
+		logger.info("Processing session event", {
+			eventType: stripeEvent.type,
+			sessionId: session.object.id,
+		});
 
 		switch (stripeEvent.type) {
 			case "checkout.session.completed":
@@ -47,9 +55,10 @@ export const sessionEventConductor =
 					stripe,
 					eventBridgeClient,
 					eventBusName,
+					logger,
 				})(session);
 				break;
 			default:
-				console.log(`Unhandled event type: ${stripeEvent.type}`);
+				logger.warn("Unhandled event type", { eventType: stripeEvent.type });
 		}
 	};

@@ -1,16 +1,26 @@
 import type Stripe from "stripe";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type {
   SubscriptionDeletedDependencies,
   SubscriptionDeletedEvent,
 } from "./SubscriptionDeleted.types";
+import type { Logger } from "../types/utils.types";
+import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 
 export const subscriptionDeleted =
   ({
     stripe,
     eventBridgeClient,
     eventBusName,
-  }: SubscriptionDeletedDependencies) =>
+    logger,
+    dynamoDBClient,
+    idempotencyTableName,
+  }: SubscriptionDeletedDependencies & { 
+    logger: Logger;
+    dynamoDBClient: DynamoDBClient;
+    idempotencyTableName: string;
+  }) =>
   async (event: SubscriptionDeletedEvent) => {
     const {
       id: stripeSubscriptionId,
@@ -19,16 +29,44 @@ export const subscriptionDeleted =
       canceled_at,
       customer,
     } = event;
-    console.log(event, "subscriptionDeleted event received");
+    
+    logger.logStripeEvent("customer.subscription.deleted", event as unknown as Record<string, unknown>);
+    logger.debug("Received subscriptionDeleted event", { event });
+    
     try {
       const stripeCustomer = (await stripe.customers.retrieve(
         customer as string,
       )) as Stripe.Customer;
-      console.log(stripeCustomer, "stripeCustomer retrieved");
+      logger.debug("stripeCustomer retrieved", { stripeCustomer });
       const { email } = stripeCustomer;
-      console.log(status, "subscription status");
+      logger.debug("subscription status", { status });
+      
       if (status !== "canceled") {
-        console.warn("Subscription is not canceled, skipping");
+        logger.warn("Subscription is not canceled, skipping", { status });
+        return;
+      }
+
+      // Generate idempotency key for subscription deletion
+      const eventId = generateEventId("subscription-deleted", stripeSubscriptionId);
+      
+      // Check idempotency
+      const idempotencyResult = await ensureIdempotency(
+        { dynamoDBClient, tableName: idempotencyTableName, logger },
+        eventId,
+        { 
+          subscriptionId: stripeSubscriptionId, 
+          customerId: customer,
+          status,
+          endedAt: ended_at,
+          canceledAt: canceled_at
+        }
+      );
+
+      if (idempotencyResult.isDuplicate) {
+        logger.info("Subscription deletion already processed, skipping", { 
+          subscriptionId: stripeSubscriptionId,
+          eventId 
+        });
         return;
       }
 
@@ -50,8 +88,16 @@ export const subscriptionDeleted =
           ],
         }),
       );
+
+      logger.info("SubscriptionDeleted event sent", {
+        subscriptionId: stripeSubscriptionId,
+        customerEmail: email,
+      });
     } catch (error) {
-      console.error("Error processing subscription cancellation:", error);
+      logger.error("Error processing subscription deletion", {
+        subscriptionId: stripeSubscriptionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   };

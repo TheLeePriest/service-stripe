@@ -1,29 +1,52 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { subscriptionCreated } from "./SubscriptionCreated";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type Stripe from "stripe";
 import type { SubscriptionCreatedEvent } from "./SubscriptionCreated.types";
 
 describe("subscriptionCreated", () => {
   const mockUuid = "uuid-123";
   const mockEventBusName = "test-bus";
+  const mockIdempotencyTableName = "test-idempotency-table";
   const mockSend = vi.fn();
   const mockRetrieveCustomer = vi.fn();
   const mockRetrieveProduct = vi.fn();
+  const mockDynamoDBSend = vi.fn();
 
+  const mockRetrievePrice = vi.fn();
   const stripeMock = {
     customers: { retrieve: mockRetrieveCustomer },
     products: { retrieve: mockRetrieveProduct },
-    subscriptions: { retrieve: vi.fn() },
+    subscriptions: { retrieve: vi.fn(), update: vi.fn() },
+    prices: { list: vi.fn(), retrieve: mockRetrievePrice },
+    billing: {
+      meterEvents: {
+        create: vi.fn(),
+      },
+    },
   };
 
   const eventBridgeClientMock = { send: mockSend };
+  const dynamoDBClientMock = { send: mockDynamoDBSend } as unknown as DynamoDBClient;
+
+  const mockLogger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    logUsageEvent: vi.fn(),
+    logStripeEvent: vi.fn(),
+  };
 
   const dependencies = {
     stripe: stripeMock,
     uuidv4: () => mockUuid,
     eventBridgeClient: eventBridgeClientMock,
     eventBusName: mockEventBusName,
+    dynamoDBClient: dynamoDBClientMock,
+    idempotencyTableName: mockIdempotencyTableName,
+    logger: mockLogger,
   };
 
   const baseEvent: SubscriptionCreatedEvent = {
@@ -54,10 +77,20 @@ describe("subscriptionCreated", () => {
   it("should retrieve customer and product, and send event for each item", async () => {
     const mockStripeCustomer = { email: "test@example.com" };
     const mockProduct = { id: "prod_123", name: "Test Product" };
+    const mockPrice = {
+      unit_amount: 1000,
+      currency: "usd",
+      recurring: { interval: "month" },
+      metadata: {},
+    };
 
     mockRetrieveCustomer.mockResolvedValue(mockStripeCustomer);
     mockRetrieveProduct.mockResolvedValue(mockProduct);
+    mockRetrievePrice.mockResolvedValue(mockPrice);
     mockSend.mockResolvedValue({});
+    // Mock DynamoDB responses for idempotency
+    mockDynamoDBSend.mockResolvedValueOnce({}); // GetItem - no existing item
+    mockDynamoDBSend.mockResolvedValueOnce({}); // PutItem - store new item
 
     await subscriptionCreated(dependencies)(baseEvent);
 
@@ -78,37 +111,54 @@ describe("subscriptionCreated", () => {
 
     const detail = JSON.parse(entries[0].Detail);
     expect(detail).toMatchObject({
-      licenseKey: mockUuid,
       stripeSubscriptionId: "sub_123",
+      stripeCustomerId: "cus_123",
       customerEmail: "test@example.com",
-      productId: "prod_123",
-      productName: "Test Product",
-      priceId: "price_123",
-      quantity: 2,
+      items: [
+        {
+          itemId: "item_123",
+          productId: "prod_123",
+          productName: "Test Product",
+          priceId: "price_123",
+          priceData: {
+            unitAmount: 1000,
+            currency: "usd",
+            recurring: { interval: "month" },
+            metadata: {},
+          },
+          quantity: 2,
+          expiresAt: 1625097600,
+          metadata: { test: "ing" },
+        },
+      ],
       status: "active",
       createdAt: 3333333333,
       cancelAtPeriodEnd: false,
       trialStart: 1111111111,
       trialEnd: 2222222222,
-      expiresAt: 1625097600,
-      metadata: { test: "ing" },
     });
   });
 
   it("should throw if stripe.customers.retrieve fails", async () => {
     mockRetrieveCustomer.mockRejectedValue(new Error("Customer not found"));
+    // Mock DynamoDB responses for idempotency
+    mockDynamoDBSend.mockResolvedValueOnce({}); // GetItem - no existing item
+    mockDynamoDBSend.mockResolvedValueOnce({}); // PutItem - store new item
 
     await expect(subscriptionCreated(dependencies)(baseEvent)).rejects.toThrow(
-      "Failed to retrieve customer: Customer not found",
+      "Customer not found",
     );
   });
 
   it("should throw if stripe.products.retrieve fails", async () => {
     mockRetrieveCustomer.mockResolvedValue({ email: "test@example.com" });
     mockRetrieveProduct.mockRejectedValue(new Error("Product not found"));
+    // Mock DynamoDB responses for idempotency
+    mockDynamoDBSend.mockResolvedValueOnce({}); // GetItem - no existing item
+    mockDynamoDBSend.mockResolvedValueOnce({}); // PutItem - store new item
 
     await expect(subscriptionCreated(dependencies)(baseEvent)).rejects.toThrow(
-      "Failed to retrieve product: Product not found",
+      "Product not found",
     );
   });
 
@@ -119,9 +169,12 @@ describe("subscriptionCreated", () => {
       name: "Test Product",
     });
     mockSend.mockRejectedValue(new Error("EventBridge error"));
+    // Mock DynamoDB responses for idempotency
+    mockDynamoDBSend.mockResolvedValueOnce({}); // GetItem - no existing item
+    mockDynamoDBSend.mockResolvedValueOnce({}); // PutItem - store new item
 
     await expect(subscriptionCreated(dependencies)(baseEvent)).rejects.toThrow(
-      "Failed to send event to EventBridge: EventBridge error",
+      "EventBridge error",
     );
   });
 });

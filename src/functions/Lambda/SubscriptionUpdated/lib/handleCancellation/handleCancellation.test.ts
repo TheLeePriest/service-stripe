@@ -20,7 +20,8 @@ const mockEvent = {
         },
         quantity: 1,
         current_period_end: 1234567890,
-        metadata: {},
+        current_period_start: 1234567890,
+        metadata: {} as Record<string, unknown>,
       },
     ],
   },
@@ -34,10 +35,16 @@ describe("handleCancellation", () => {
     send: sendMock,
   };
 
+  const mockLogger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    logUsageEvent: vi.fn(),
+    logStripeEvent: vi.fn(),
+  };
+
   beforeEach(() => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    vi.spyOn(console, "info").mockImplementation(() => {});
-    vi.spyOn(console, "error").mockImplementation(() => {});
     vi.useFakeTimers();
   });
 
@@ -53,9 +60,13 @@ describe("handleCancellation", () => {
       subscription: mockEvent,
       eventBridgeClient: mockEventBridgeClient,
       eventBusName,
+      logger: mockLogger,
     });
 
     expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(mockLogger.info).toHaveBeenCalledWith("Sent SubscriptionCancelled event", {
+      subscriptionId: "sub_123",
+    });
   });
 
   it("does nothing if all items are in the past", async () => {
@@ -76,7 +87,8 @@ describe("handleCancellation", () => {
             },
             quantity: 1,
             current_period_end: 1234567890,
-            metadata: {},
+            current_period_start: 1234567890,
+            metadata: {} as Record<string, unknown>,
           },
         ],
       },
@@ -87,9 +99,12 @@ describe("handleCancellation", () => {
       subscription,
       eventBridgeClient: mockEventBridgeClient,
       eventBusName,
+      logger: mockLogger,
     });
 
     expect(sendMock).not.toHaveBeenCalled();
-    expect(console.warn).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith("Skipping subscription cancellation, subscription has already ended", {
+      subscriptionId: "sub_123",
+    });
   });
 });

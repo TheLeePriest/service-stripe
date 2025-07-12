@@ -2,9 +2,10 @@ import type {
   PutEventsCommand,
   PutEventsCommandOutput,
 } from "@aws-sdk/client-eventbridge";
+import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type Stripe from "stripe";
-import type { SchedulerClient } from "../types/aws.types";
 import type { StripeClient } from "../types/stripe.types";
+import type { SchedulerClient } from "../types/aws.types";
 
 export type SubscriptionUpdatedDependencies = {
   eventBridgeClient: {
@@ -15,6 +16,8 @@ export type SubscriptionUpdatedDependencies = {
   eventBusSchedulerRoleArn: string;
   schedulerClient: SchedulerClient;
   stripe: StripeClient;
+  dynamoDBClient: DynamoDBClient;
+  idempotencyTableName: string;
 };
 
 export type SubscriptionUpdatedEvent = {

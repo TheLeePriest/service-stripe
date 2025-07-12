@@ -19,6 +19,15 @@ const mockProductRetrieve = vi.fn();
 const mockEventBridgeSend = vi.fn();
 const mockSchedulerSend = vi.fn();
 
+const mockLogger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  logUsageEvent: vi.fn(),
+  logStripeEvent: vi.fn(),
+};
+
 const baseDeps = {
   stripe: {
     customers: {
@@ -30,6 +39,7 @@ const baseDeps = {
     subscriptions: {
       retrieve: vi.fn(),
     },
+    prices: { list: vi.fn(), retrieve: vi.fn() },
   },
   eventBridgeClient: {
     send: mockEventBridgeSend,
@@ -41,6 +51,7 @@ const baseDeps = {
   schedulerClient: {
     send: mockSchedulerSend,
   },
+  logger: mockLogger,
 };
 
 const makeEvent = (
@@ -103,6 +114,7 @@ describe("subscriptionEventConductor", () => {
       uuidv4: baseDeps.uuidv4,
       eventBridgeClient: baseDeps.eventBridgeClient,
       eventBusName: baseDeps.eventBusName,
+      logger: baseDeps.logger,
     });
     expect(mockHandler).toHaveBeenCalledWith({
       cancel_at_period_end: false,
@@ -140,6 +152,8 @@ describe("subscriptionEventConductor", () => {
       eventBusSchedulerRoleArn: baseDeps.eventBusSchedulerRoleArn,
       eventBusName: baseDeps.eventBusName,
       schedulerClient: baseDeps.schedulerClient,
+      stripe: baseDeps.stripe,
+      logger: baseDeps.logger,
     });
 
     expect(mockHandler).toHaveBeenCalledWith({
@@ -148,6 +162,7 @@ describe("subscriptionEventConductor", () => {
       id: "sub_123",
       items: { data: [] },
       status: "active",
+      createdAt: expect.any(Number),
     });
   });
 
@@ -170,6 +185,7 @@ describe("subscriptionEventConductor", () => {
       stripe: baseDeps.stripe,
       eventBridgeClient: baseDeps.eventBridgeClient,
       eventBusName: baseDeps.eventBusName,
+      logger: baseDeps.logger,
     });
 
     expect(mockHandler).toHaveBeenCalledWith({
@@ -180,16 +196,13 @@ describe("subscriptionEventConductor", () => {
   });
 
   it("logs for unhandled event types", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const handler = subscriptionEventConductor(baseDeps);
     const event = makeEvent("unknown.event.type");
 
     await handler(event);
 
-    expect(logSpy).toHaveBeenCalledWith(
-      `Unhandled event type: ${event.detail.type}`,
-    );
-
-    logSpy.mockRestore();
+    expect(mockLogger.warn).toHaveBeenCalledWith("Unhandled event type", {
+      eventType: "unknown.event.type",
+    });
   });
 });

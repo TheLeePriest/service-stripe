@@ -7,18 +7,33 @@ import { handleUncancellation } from "./lib/handleUncancellation/handleUncancell
 import { handleQuantityChange } from "./lib/handleQuantityChange/handleQuantityChange";
 import { determineSubscriptionState } from "./lib/determineSubscriptionState/determineSubscriptionState";
 import { handleRenewal } from "./lib/handleRenewal/handleRenewal";
+import type { Logger } from "../types/utils.types";
 
 export const subscriptionUpdated =
   ({
     eventBridgeClient,
     eventBusName,
+    eventBusArn,
+    eventBusSchedulerRoleArn,
+    schedulerClient,
     stripe,
-  }: SubscriptionUpdatedDependencies) =>
+    logger,
+    dynamoDBClient,
+    idempotencyTableName,
+  }: SubscriptionUpdatedDependencies & { logger: Logger }) =>
   async (event: SubscriptionUpdatedEvent) => {
     const { id: stripeSubscriptionId, status } = event;
 
+    logger.logStripeEvent("customer.subscription.updated", event as unknown as Record<string, unknown>);
+
     try {
       const state = determineSubscriptionState(event);
+
+      logger.info("Processing subscription update", {
+        subscriptionId: stripeSubscriptionId,
+        status,
+        state,
+      });
 
       switch (state) {
         case "QUANTITY_CHANGED": {
@@ -29,6 +44,9 @@ export const subscriptionUpdated =
             eventBridgeClient,
             eventBusName,
             stripe,
+            logger,
+            dynamoDBClient,
+            idempotencyTableName,
           });
           break;
         }
@@ -38,11 +56,14 @@ export const subscriptionUpdated =
             subscription: event,
             eventBridgeClient,
             eventBusName,
+            logger,
+            dynamoDBClient,
+            idempotencyTableName,
           });
           break;
 
         case "UNCANCELLING":
-          await handleUncancellation(event, schedulerClient);
+          await handleUncancellation(event, schedulerClient, logger);
           break;
 
         case "RENEWED":
@@ -51,28 +72,33 @@ export const subscriptionUpdated =
             eventBridgeClient,
             eventBusName,
             stripe,
+            logger,
+            dynamoDBClient,
+            idempotencyTableName,
           });
           break;
 
         case "OTHER_UPDATE":
-          console.log(
-            `Subscription ${stripeSubscriptionId} updated with status: ${status}`,
-          );
+          logger.info("Subscription updated", {
+            subscriptionId: stripeSubscriptionId,
+            status,
+          });
           break;
 
         default: {
           const _exhaustiveCheck: never = state;
-          console.log(
-            `Unhandled subscription state for ${stripeSubscriptionId}`,
-          );
+          logger.warn("Unhandled subscription state", {
+            subscriptionId: stripeSubscriptionId,
+            state,
+          });
           return _exhaustiveCheck;
         }
       }
     } catch (error) {
-      console.error(
-        `Error processing subscription ${stripeSubscriptionId}:`,
-        error,
-      );
+      logger.error("Error processing subscription", {
+        subscriptionId: stripeSubscriptionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   };

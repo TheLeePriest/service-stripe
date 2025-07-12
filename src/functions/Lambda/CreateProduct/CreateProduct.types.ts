@@ -3,6 +3,7 @@ import type {
 	PutItemCommandOutput,
 } from "@aws-sdk/client-dynamodb";
 import type Stripe from "stripe";
+import type { StripeLogger } from "../types/logger.types";
 
 export type CreateProductDependencies = {
 	dynamoDBClient: {
@@ -10,4 +11,5 @@ export type CreateProductDependencies = {
 	};
 	stripe: Stripe;
 	productsTableName: string;
+	logger: StripeLogger;
 };

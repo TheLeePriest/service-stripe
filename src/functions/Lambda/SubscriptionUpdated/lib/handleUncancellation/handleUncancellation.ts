@@ -5,10 +5,12 @@ import {
 import type Stripe from "stripe";
 import type { SchedulerClient } from "../../../types/aws.types";
 import type { SubscriptionUpdatedEvent } from "../../SubscriptionUpdated.types";
+import type { Logger } from "../../../types/utils.types";
 
 export const handleUncancellation = async (
   subscription: SubscriptionUpdatedEvent,
   schedulerClient: SchedulerClient,
+  logger: Logger,
 ) => {
   const { items } = subscription;
   const deletePromises = items.data.map(async (item) => {
@@ -18,13 +20,16 @@ export const handleUncancellation = async (
       await schedulerClient.send(
         new DeleteScheduleCommand({ Name: scheduleName }),
       );
-      console.log(`Deleted schedule ${scheduleName}`);
+      logger.info("Deleted schedule", { scheduleName });
     } catch (error) {
       const { name } = error as Error;
       if (name === ResourceNotFoundException.name) {
-        console.log(`Schedule ${scheduleName} not found; skipping.`);
+        logger.info("Schedule not found, skipping", { scheduleName });
       } else {
-        console.error(`Error deleting schedule ${scheduleName}:`, error);
+        logger.error("Error deleting schedule", { 
+          scheduleName,
+          error: error instanceof Error ? error.message : String(error),
+        });
         throw error;
       }
     }

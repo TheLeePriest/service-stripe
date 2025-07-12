@@ -2,6 +2,7 @@ import type {
   PutEventsCommand,
   PutEventsCommandOutput,
 } from "@aws-sdk/client-eventbridge";
+import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type Stripe from "stripe";
 import type { StripeClient } from "../types/stripe.types";
 
@@ -11,7 +12,9 @@ export type SubscriptionCreatedDependencies = {
   eventBridgeClient: {
     send: (command: PutEventsCommand) => Promise<PutEventsCommandOutput>;
   };
+  dynamoDBClient: DynamoDBClient;
   eventBusName: string;
+  idempotencyTableName: string;
 };
 
 export type SubscriptionCreatedEvent = {

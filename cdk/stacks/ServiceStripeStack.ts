@@ -173,6 +173,15 @@ export class ServiceStripeStack extends Stack {
         stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
     });
 
+    const idempotencyTable = new Table(this, `${serviceName}-idempotency-${stage}`, {
+      tableName: `stripe-idempotency-${stage}`,
+      partitionKey: { name: "PK", type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: "ttl",
+      removalPolicy:
+        stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+    });
+
     const createProductLambdaPath = path.join(
       __dirname,
       "../../src/functions/Lambda/CreateProduct/CreateProduct.handler.ts",
@@ -201,11 +210,12 @@ export class ServiceStripeStack extends Stack {
         customOptions: {
           logGroup: createProductLogGroup,
           timeout: Duration.seconds(30),
-          memorySize: 256,
+          memorySize: 512, // Increased for DynamoDB operations
           environment: {
             STRIPE_SECRET_KEY,
             PRODUCTS_TABLE_NAME: productsTable.tableName,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
+            IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
           },
         },
       },
@@ -229,6 +239,7 @@ export class ServiceStripeStack extends Stack {
     );
 
     productsTable.grantReadWriteData(createProductLambda.tsLambdaFunction);
+    idempotencyTable.grantReadWriteData(createProductLambda.tsLambdaFunction);
 
     const updateProductLambdaPath = path.join(
       __dirname,
@@ -263,6 +274,7 @@ export class ServiceStripeStack extends Stack {
             STRIPE_SECRET_KEY,
             PRODUCTS_TABLE_NAME: productsTable.tableName,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
+            IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
           },
         },
       },
@@ -286,6 +298,7 @@ export class ServiceStripeStack extends Stack {
     );
 
     productsTable.grantReadWriteData(updateProductLambda.tsLambdaFunction);
+    idempotencyTable.grantReadWriteData(updateProductLambda.tsLambdaFunction);
 
     const deleteProductLambdaPath = path.join(
       __dirname,
@@ -320,6 +333,7 @@ export class ServiceStripeStack extends Stack {
             STAGE: stage,
             STRIPE_SECRET_KEY,
             PRODUCTS_TABLE_NAME: productsTable.tableName,
+            IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
           },
         },
       },
@@ -343,6 +357,7 @@ export class ServiceStripeStack extends Stack {
     );
 
     productsTable.grantReadWriteData(deleteProductLambda.tsLambdaFunction);
+    idempotencyTable.grantReadWriteData(deleteProductLambda.tsLambdaFunction);
 
     const sessionEventConductorLambdaPath = path.join(
       __dirname,
@@ -372,11 +387,12 @@ export class ServiceStripeStack extends Stack {
         customOptions: {
           logGroup: sessionEventConductorLogGroup,
           timeout: Duration.seconds(30),
-          memorySize: 256,
+          memorySize: 1024, // Increased for complex subscription processing
           environment: {
             STRIPE_SECRET_KEY,
             STAGE: stage,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
+            IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
           },
         },
       },
@@ -385,6 +401,7 @@ export class ServiceStripeStack extends Stack {
     targetEventBus.grantPutEventsTo(
       sessionEventConductorLambda.tsLambdaFunction,
     );
+    idempotencyTable.grantReadWriteData(sessionEventConductorLambda.tsLambdaFunction);
 
     const sessionConductorRule = new Rule(
       this,
@@ -438,6 +455,7 @@ export class ServiceStripeStack extends Stack {
             TARGET_EVENT_BUS_NAME: targetEventBusName,
             SCHEDULER_ROLE_ARN: schedulerRole.roleArn,
             EVENT_BUS_ARN: targetEventBus.eventBusArn,
+            IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
           },
         },
       },
@@ -446,6 +464,7 @@ export class ServiceStripeStack extends Stack {
     targetEventBus.grantPutEventsTo(
       subscriptionEventConductorLambda.tsLambdaFunction,
     );
+    idempotencyTable.grantReadWriteData(subscriptionEventConductorLambda.tsLambdaFunction);
 
     const subscriptionConductorRule = new Rule(
       this,
@@ -519,6 +538,7 @@ export class ServiceStripeStack extends Stack {
             TARGET_EVENT_BUS_NAME: targetEventBusName,
             SCHEDULER_ROLE_ARN: schedulerRole.roleArn,
             EVENT_BUS_ARN: targetEventBus.eventBusArn,
+            IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
           },
         },
       },

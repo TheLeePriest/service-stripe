@@ -1,0 +1,24 @@
+# Conventional Commits Start Point
+
+This file marks the beginning of conventional commit usage in this project.
+
+- **Start Point**: current commit
+- **Setup Date**: 2025-07-12
+- **Previous Commits**: 16 legacy commits remain unchanged
+- **Future Commits**: All new commits must follow conventional commit format
+
+## Usage
+
+- Use `bumper commit` for interactive commit creation
+- Use `bumper suggest "your message"` for commit suggestions
+- Use `bumper validate` to check commit format
+- Use `bumper preview` to see changelog preview
+
+## Migration Notes
+
+- Legacy commits before this point are preserved as-is
+- Changelog generation will include both legacy and conventional commits
+- Legacy commits are categorized as 'chore' by default
+- Consider gradual migration of legacy commits if desired
+
+For more information, see: https://github.com/TheLeePriest/bumper

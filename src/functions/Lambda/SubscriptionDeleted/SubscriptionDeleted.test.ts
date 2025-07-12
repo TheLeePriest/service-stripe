@@ -14,15 +14,26 @@ describe("subscriptionDeleted", () => {
     products: {
       retrieve: vi.fn(),
     },
+    prices: { list: vi.fn(), retrieve: vi.fn() },
   };
   const mockEventBridgeClient = {
     send: mockEventBridgeSend,
+  };
+
+  const mockLogger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    logUsageEvent: vi.fn(),
+    logStripeEvent: vi.fn(),
   };
 
   const dependencies = {
     stripe: mockStripe,
     eventBridgeClient: mockEventBridgeClient,
     eventBusName,
+    logger: mockLogger,
   };
 
   const baseEvent = {
@@ -71,33 +82,29 @@ describe("subscriptionDeleted", () => {
     };
     mockRetrieve.mockResolvedValue({ email: "user@example.com" });
 
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
     await subscriptionDeleted(dependencies)(event);
 
     expect(mockEventBridgeSend).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(mockLogger.warn).toHaveBeenCalledWith(
       "Subscription is not canceled, skipping",
+      { status: "active" },
     );
-
-    warnSpy.mockRestore();
   });
 
   it("should log and throw error if stripe.customer.retrieve fails", async () => {
     const error = new Error("Stripe error");
     mockRetrieve.mockRejectedValue(error);
 
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
     await expect(subscriptionDeleted(dependencies)(baseEvent)).rejects.toThrow(
       "Stripe error",
     );
-    expect(errorSpy).toHaveBeenCalledWith(
-      "Error processing subscription cancellation:",
-      error,
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      "Error processing subscription cancellation",
+      {
+        error: "Stripe error",
+        subscriptionId: "sub_123",
+      },
     );
-
-    errorSpy.mockRestore();
   });
 
   it("should log and throw error if eventBridgeClient.send fails", async () => {
@@ -105,16 +112,15 @@ describe("subscriptionDeleted", () => {
     const error = new Error("EventBridge error");
     mockEventBridgeSend.mockRejectedValue(error);
 
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
     await expect(subscriptionDeleted(dependencies)(baseEvent)).rejects.toThrow(
       "EventBridge error",
     );
-    expect(errorSpy).toHaveBeenCalledWith(
-      "Error processing subscription cancellation:",
-      error,
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      "Error processing subscription cancellation",
+      {
+        error: "EventBridge error",
+        subscriptionId: "sub_123",
+      },
     );
-
-    errorSpy.mockRestore();
   });
 });
