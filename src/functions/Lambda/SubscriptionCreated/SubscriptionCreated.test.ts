@@ -76,26 +76,25 @@ describe("subscriptionCreated", () => {
 
   it("should retrieve customer and product, and send event for each item", async () => {
     const mockStripeCustomer = { email: "test@example.com" };
-    const mockProduct = { id: "prod_123", name: "Test Product" };
-    const mockPrice = {
+    mockRetrieveCustomer.mockResolvedValue(mockStripeCustomer);
+    // Use mockImplementation to return the correct id for each call
+    mockRetrieveProduct.mockImplementation(async (id) => ({ id, name: "Test Product" }));
+    mockRetrievePrice.mockImplementation(async (id) => ({
+      id,
       unit_amount: 1000,
       currency: "usd",
       recurring: { interval: "month" },
       metadata: {},
-    };
-
-    mockRetrieveCustomer.mockResolvedValue(mockStripeCustomer);
-    mockRetrieveProduct.mockResolvedValue(mockProduct);
-    mockRetrievePrice.mockResolvedValue(mockPrice);
+    }));
     mockSend.mockResolvedValue({});
-    // Mock DynamoDB responses for idempotency
-    mockDynamoDBSend.mockResolvedValueOnce({}); // GetItem - no existing item
-    mockDynamoDBSend.mockResolvedValueOnce({}); // PutItem - store new item
+    // Mock DynamoDB responses for idempotency - PutItem succeeds (no existing item)
+    mockDynamoDBSend.mockResolvedValueOnce({});
 
     await subscriptionCreated(dependencies)(baseEvent);
 
     expect(mockRetrieveCustomer).toHaveBeenCalledWith("cus_123");
     expect(mockRetrieveProduct).toHaveBeenCalledWith("prod_123");
+    expect(mockRetrievePrice).toHaveBeenCalledWith("price_123");
     expect(mockSend).toHaveBeenCalledTimes(1);
 
     const sentCommand = mockSend.mock.calls[0][0];
@@ -141,9 +140,8 @@ describe("subscriptionCreated", () => {
 
   it("should throw if stripe.customers.retrieve fails", async () => {
     mockRetrieveCustomer.mockRejectedValue(new Error("Customer not found"));
-    // Mock DynamoDB responses for idempotency
-    mockDynamoDBSend.mockResolvedValueOnce({}); // GetItem - no existing item
-    mockDynamoDBSend.mockResolvedValueOnce({}); // PutItem - store new item
+    // Mock DynamoDB responses for idempotency - PutItem succeeds (no existing item)
+    mockDynamoDBSend.mockResolvedValueOnce({});
 
     await expect(subscriptionCreated(dependencies)(baseEvent)).rejects.toThrow(
       "Customer not found",
@@ -153,9 +151,8 @@ describe("subscriptionCreated", () => {
   it("should throw if stripe.products.retrieve fails", async () => {
     mockRetrieveCustomer.mockResolvedValue({ email: "test@example.com" });
     mockRetrieveProduct.mockRejectedValue(new Error("Product not found"));
-    // Mock DynamoDB responses for idempotency
-    mockDynamoDBSend.mockResolvedValueOnce({}); // GetItem - no existing item
-    mockDynamoDBSend.mockResolvedValueOnce({}); // PutItem - store new item
+    // Mock DynamoDB responses for idempotency - PutItem succeeds (no existing item)
+    mockDynamoDBSend.mockResolvedValueOnce({});
 
     await expect(subscriptionCreated(dependencies)(baseEvent)).rejects.toThrow(
       "Product not found",
@@ -164,14 +161,17 @@ describe("subscriptionCreated", () => {
 
   it("should throw if eventBridgeClient.send fails", async () => {
     mockRetrieveCustomer.mockResolvedValue({ email: "test@example.com" });
-    mockRetrieveProduct.mockResolvedValue({
-      id: "prod_123",
-      name: "Test Product",
-    });
+    mockRetrieveProduct.mockImplementation(async (id) => ({ id, name: "Test Product" }));
+    mockRetrievePrice.mockImplementation(async (id) => ({
+      id,
+      unit_amount: 1000,
+      currency: "usd",
+      recurring: { interval: "month" },
+      metadata: {},
+    }));
     mockSend.mockRejectedValue(new Error("EventBridge error"));
-    // Mock DynamoDB responses for idempotency
-    mockDynamoDBSend.mockResolvedValueOnce({}); // GetItem - no existing item
-    mockDynamoDBSend.mockResolvedValueOnce({}); // PutItem - store new item
+    // Mock DynamoDB responses for idempotency - PutItem succeeds (no existing item)
+    mockDynamoDBSend.mockResolvedValueOnce({});
 
     await expect(subscriptionCreated(dependencies)(baseEvent)).rejects.toThrow(
       "EventBridge error",

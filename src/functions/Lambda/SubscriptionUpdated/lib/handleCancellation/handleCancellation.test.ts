@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { handleCancellation } from "./handleCancellation";
 import type { SubscriptionUpdatedEvent } from "../../SubscriptionUpdated.types";
+import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 
 const mockEvent = {
   id: "sub_123",
@@ -28,12 +29,15 @@ const mockEvent = {
 } satisfies SubscriptionUpdatedEvent;
 
 const eventBusName = "test-event-bus";
+const mockIdempotencyTableName = "test-idempotency-table";
 
 describe("handleCancellation", () => {
   const sendMock = vi.fn();
+  const mockDynamoDBSend = vi.fn();
   const mockEventBridgeClient = {
     send: sendMock,
   };
+  const dynamoDBClientMock = { send: mockDynamoDBSend } as unknown as DynamoDBClient;
 
   const mockLogger = {
     info: vi.fn(),
@@ -55,11 +59,15 @@ describe("handleCancellation", () => {
 
   it("sends event for LicenseCancelled", async () => {
     sendMock.mockResolvedValueOnce({});
+    // Mock DynamoDB responses for idempotency
+    mockDynamoDBSend.mockResolvedValueOnce({}); // PutItem - store new item
     vi.setSystemTime(1134567890 * 1000);
     await handleCancellation({
       subscription: mockEvent,
       eventBridgeClient: mockEventBridgeClient,
       eventBusName,
+      dynamoDBClient: dynamoDBClientMock,
+      idempotencyTableName: mockIdempotencyTableName,
       logger: mockLogger,
     });
 
@@ -93,11 +101,14 @@ describe("handleCancellation", () => {
         ],
       },
     } satisfies SubscriptionUpdatedEvent;
-    vi.setSystemTime(1334567890 * 1000);
+    // Set system time to well after current_period_end
+    vi.setSystemTime((1234567890 + 100000) * 1000);
 
     await handleCancellation({
       subscription,
       eventBridgeClient: mockEventBridgeClient,
+      dynamoDBClient: dynamoDBClientMock,
+      idempotencyTableName: mockIdempotencyTableName,
       eventBusName,
       logger: mockLogger,
     });

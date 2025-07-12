@@ -22,6 +22,19 @@ export const handleCancellation = async ({
 }) => {
   logger.info("Handling cancellation for subscription", { subscriptionId: subscription.id });
 
+  // Check if all items are in the past
+  const now = Math.floor(Date.now() / 1000);
+  const allItemsInPast = subscription.items.data.every(
+    (item) => item.current_period_end < now
+  );
+
+  if (allItemsInPast) {
+    logger.warn("Skipping subscription cancellation, subscription has already ended", {
+      subscriptionId: subscription.id,
+    });
+    return;
+  }
+
   // Generate idempotency key for cancellation
   const eventId = generateEventId("subscription-cancelled", subscription.id);
   

@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { subscriptionDeleted } from "./SubscriptionDeleted";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type Stripe from "stripe";
 
 describe("subscriptionDeleted", () => {
   const mockRetrieve = vi.fn();
   const mockEventBridgeSend = vi.fn();
+  const mockDynamoDBSend = vi.fn();
   const eventBusName = "test-bus";
+  const mockIdempotencyTableName = "test-idempotency-table";
   const mockStripe = {
     customers: {
       retrieve: mockRetrieve,
@@ -19,6 +22,7 @@ describe("subscriptionDeleted", () => {
   const mockEventBridgeClient = {
     send: mockEventBridgeSend,
   };
+  const dynamoDBClientMock = { send: mockDynamoDBSend } as unknown as DynamoDBClient;
 
   const mockLogger = {
     info: vi.fn(),
@@ -33,6 +37,8 @@ describe("subscriptionDeleted", () => {
     stripe: mockStripe,
     eventBridgeClient: mockEventBridgeClient,
     eventBusName,
+    dynamoDBClient: dynamoDBClientMock,
+    idempotencyTableName: mockIdempotencyTableName,
     logger: mockLogger,
   };
 
@@ -51,6 +57,8 @@ describe("subscriptionDeleted", () => {
   it("should send event to EventBridge when subscription is canceled", async () => {
     mockRetrieve.mockResolvedValue({ email: "user@example.com" });
     mockEventBridgeSend.mockResolvedValue({});
+    // Mock DynamoDB responses for idempotency
+    mockDynamoDBSend.mockResolvedValueOnce({}); // PutItem - store new item
 
     await subscriptionDeleted(dependencies)(baseEvent);
 
@@ -99,7 +107,7 @@ describe("subscriptionDeleted", () => {
       "Stripe error",
     );
     expect(mockLogger.error).toHaveBeenCalledWith(
-      "Error processing subscription cancellation",
+      "Error processing subscription deletion",
       {
         error: "Stripe error",
         subscriptionId: "sub_123",
@@ -111,12 +119,14 @@ describe("subscriptionDeleted", () => {
     mockRetrieve.mockResolvedValue({ email: "user@example.com" });
     const error = new Error("EventBridge error");
     mockEventBridgeSend.mockRejectedValue(error);
+    // Mock DynamoDB responses for idempotency
+    mockDynamoDBSend.mockResolvedValueOnce({}); // PutItem - store new item
 
     await expect(subscriptionDeleted(dependencies)(baseEvent)).rejects.toThrow(
       "EventBridge error",
     );
     expect(mockLogger.error).toHaveBeenCalledWith(
-      "Error processing subscription cancellation",
+      "Error processing subscription deletion",
       {
         error: "EventBridge error",
         subscriptionId: "sub_123",
