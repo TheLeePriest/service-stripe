@@ -583,7 +583,7 @@ export class ServiceStripeStack extends Stack {
       {
         serviceName,
         stage,
-        handlerName: "handler",
+        handlerName: "invoiceCreatedHandler",
         entryPath: invoiceCreatedLambdaPath,
         tsConfigPath,
         functionName: `${serviceName}-invoice-created-${stage}`,
@@ -626,7 +626,7 @@ export class ServiceStripeStack extends Stack {
       {
         serviceName,
         stage,
-        handlerName: "handler",
+        handlerName: "invoicePaymentSucceededHandler",
         entryPath: invoicePaymentSucceededLambdaPath,
         tsConfigPath,
         functionName: `${serviceName}-invoice-payment-succeeded-${stage}`,
@@ -669,7 +669,7 @@ export class ServiceStripeStack extends Stack {
       {
         serviceName,
         stage,
-        handlerName: "handler",
+        handlerName: "invoicePaymentFailedHandler",
         entryPath: invoicePaymentFailedLambdaPath,
         tsConfigPath,
         functionName: `${serviceName}-invoice-payment-failed-${stage}`,
@@ -712,7 +712,7 @@ export class ServiceStripeStack extends Stack {
       {
         serviceName,
         stage,
-        handlerName: "handler",
+        handlerName: "paymentMethodAttachedHandler",
         entryPath: paymentMethodAttachedLambdaPath,
         tsConfigPath,
         functionName: `${serviceName}-payment-method-attached-${stage}`,
@@ -755,7 +755,7 @@ export class ServiceStripeStack extends Stack {
       {
         serviceName,
         stage,
-        handlerName: "handler",
+        handlerName: "customerCreatedHandler",
         entryPath: customerCreatedLambdaPath,
         tsConfigPath,
         functionName: `${serviceName}-customer-created-${stage}`,
