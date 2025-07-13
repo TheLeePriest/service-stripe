@@ -4,6 +4,7 @@ import type {
 	PutEventsCommand,
 	PutEventsCommandOutput,
 } from "@aws-sdk/client-eventbridge";
+import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { sessionCompleted } from "../SessionCompleted/SessionCompleted";
 import type { Logger } from "../types/utils.types";
 
@@ -14,6 +15,8 @@ type SessionEventConductorDependencies = {
 	};
 	eventBusName: string;
 	logger: Logger;
+	dynamoDBClient: DynamoDBClient;
+	idempotencyTableName: string;
 };
 
 type StripeEventBridgeDetail = {
@@ -39,6 +42,8 @@ export const sessionEventConductor =
 		eventBridgeClient,
 		eventBusName,
 		logger,
+		dynamoDBClient,
+		idempotencyTableName,
 	}: SessionEventConductorDependencies) =>
 	async (event: EventBridgeEvent<string, StripeEventBridgeDetail>) => {
 		const stripeEvent = event.detail;
@@ -56,6 +61,8 @@ export const sessionEventConductor =
 					eventBridgeClient,
 					eventBusName,
 					logger,
+					dynamoDBClient,
+					idempotencyTableName,
 				})(session);
 				break;
 			default:

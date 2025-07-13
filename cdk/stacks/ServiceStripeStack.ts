@@ -560,5 +560,306 @@ export class ServiceStripeStack extends Stack {
     sendQuantityChangeToStripeRule.addTarget(
       new LambdaFunction(sendQuantityChangeToStripeLambda.tsLambdaFunction),
     );
+
+    // Invoice Created Lambda
+    const invoiceCreatedLambdaPath = path.join(
+      __dirname,
+      "../../src/functions/Lambda/InvoiceCreated/InvoiceCreated.handler.ts",
+    );
+
+    const invoiceCreatedLogGroup = new LogGroup(
+      this,
+      `${serviceName}-invoice-created-log-group-${stage}`,
+      {
+        logGroupName: `/aws/lambda/${serviceName}-invoice-created-${stage}`,
+        retention: 7,
+        removalPolicy: RemovalPolicy.DESTROY,
+      },
+    );
+
+    const invoiceCreatedLambda = new TSLambdaFunction(
+      this,
+      `${serviceName}-invoice-created-lambda-${stage}`,
+      {
+        serviceName,
+        stage,
+        handlerName: "handler",
+        entryPath: invoiceCreatedLambdaPath,
+        tsConfigPath,
+        functionName: `${serviceName}-invoice-created-${stage}`,
+        customOptions: {
+          logGroup: invoiceCreatedLogGroup,
+          timeout: Duration.seconds(30),
+          memorySize: 256,
+          environment: {
+            STRIPE_SECRET_KEY,
+            STAGE: stage,
+            TARGET_EVENT_BUS_NAME: targetEventBusName,
+            IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
+          },
+        },
+      },
+    );
+
+    targetEventBus.grantPutEventsTo(invoiceCreatedLambda.tsLambdaFunction);
+    idempotencyTable.grantReadWriteData(invoiceCreatedLambda.tsLambdaFunction);
+
+    // Invoice Payment Succeeded Lambda
+    const invoicePaymentSucceededLambdaPath = path.join(
+      __dirname,
+      "../../src/functions/Lambda/InvoicePaymentSucceeded/InvoicePaymentSucceeded.handler.ts",
+    );
+
+    const invoicePaymentSucceededLogGroup = new LogGroup(
+      this,
+      `${serviceName}-invoice-payment-succeeded-log-group-${stage}`,
+      {
+        logGroupName: `/aws/lambda/${serviceName}-invoice-payment-succeeded-${stage}`,
+        retention: 7,
+        removalPolicy: RemovalPolicy.DESTROY,
+      },
+    );
+
+    const invoicePaymentSucceededLambda = new TSLambdaFunction(
+      this,
+      `${serviceName}-invoice-payment-succeeded-lambda-${stage}`,
+      {
+        serviceName,
+        stage,
+        handlerName: "handler",
+        entryPath: invoicePaymentSucceededLambdaPath,
+        tsConfigPath,
+        functionName: `${serviceName}-invoice-payment-succeeded-${stage}`,
+        customOptions: {
+          logGroup: invoicePaymentSucceededLogGroup,
+          timeout: Duration.seconds(30),
+          memorySize: 256,
+          environment: {
+            STRIPE_SECRET_KEY,
+            STAGE: stage,
+            TARGET_EVENT_BUS_NAME: targetEventBusName,
+            IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
+          },
+        },
+      },
+    );
+
+    targetEventBus.grantPutEventsTo(invoicePaymentSucceededLambda.tsLambdaFunction);
+    idempotencyTable.grantReadWriteData(invoicePaymentSucceededLambda.tsLambdaFunction);
+
+    // Invoice Payment Failed Lambda
+    const invoicePaymentFailedLambdaPath = path.join(
+      __dirname,
+      "../../src/functions/Lambda/InvoicePaymentFailed/InvoicePaymentFailed.handler.ts",
+    );
+
+    const invoicePaymentFailedLogGroup = new LogGroup(
+      this,
+      `${serviceName}-invoice-payment-failed-log-group-${stage}`,
+      {
+        logGroupName: `/aws/lambda/${serviceName}-invoice-payment-failed-${stage}`,
+        retention: 7,
+        removalPolicy: RemovalPolicy.DESTROY,
+      },
+    );
+
+    const invoicePaymentFailedLambda = new TSLambdaFunction(
+      this,
+      `${serviceName}-invoice-payment-failed-lambda-${stage}`,
+      {
+        serviceName,
+        stage,
+        handlerName: "handler",
+        entryPath: invoicePaymentFailedLambdaPath,
+        tsConfigPath,
+        functionName: `${serviceName}-invoice-payment-failed-${stage}`,
+        customOptions: {
+          logGroup: invoicePaymentFailedLogGroup,
+          timeout: Duration.seconds(30),
+          memorySize: 256,
+          environment: {
+            STRIPE_SECRET_KEY,
+            STAGE: stage,
+            TARGET_EVENT_BUS_NAME: targetEventBusName,
+            IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
+          },
+        },
+      },
+    );
+
+    targetEventBus.grantPutEventsTo(invoicePaymentFailedLambda.tsLambdaFunction);
+    idempotencyTable.grantReadWriteData(invoicePaymentFailedLambda.tsLambdaFunction);
+
+    // Payment Method Attached Lambda
+    const paymentMethodAttachedLambdaPath = path.join(
+      __dirname,
+      "../../src/functions/Lambda/PaymentMethodAttached/PaymentMethodAttached.handler.ts",
+    );
+
+    const paymentMethodAttachedLogGroup = new LogGroup(
+      this,
+      `${serviceName}-payment-method-attached-log-group-${stage}`,
+      {
+        logGroupName: `/aws/lambda/${serviceName}-payment-method-attached-${stage}`,
+        retention: 7,
+        removalPolicy: RemovalPolicy.DESTROY,
+      },
+    );
+
+    const paymentMethodAttachedLambda = new TSLambdaFunction(
+      this,
+      `${serviceName}-payment-method-attached-lambda-${stage}`,
+      {
+        serviceName,
+        stage,
+        handlerName: "handler",
+        entryPath: paymentMethodAttachedLambdaPath,
+        tsConfigPath,
+        functionName: `${serviceName}-payment-method-attached-${stage}`,
+        customOptions: {
+          logGroup: paymentMethodAttachedLogGroup,
+          timeout: Duration.seconds(30),
+          memorySize: 256,
+          environment: {
+            STRIPE_SECRET_KEY,
+            STAGE: stage,
+            TARGET_EVENT_BUS_NAME: targetEventBusName,
+            IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
+          },
+        },
+      },
+    );
+
+    targetEventBus.grantPutEventsTo(paymentMethodAttachedLambda.tsLambdaFunction);
+    idempotencyTable.grantReadWriteData(paymentMethodAttachedLambda.tsLambdaFunction);
+
+    // Customer Created Lambda
+    const customerCreatedLambdaPath = path.join(
+      __dirname,
+      "../../src/functions/Lambda/CustomerCreated/CustomerCreated.handler.ts",
+    );
+
+    const customerCreatedLogGroup = new LogGroup(
+      this,
+      `${serviceName}-customer-created-log-group-${stage}`,
+      {
+        logGroupName: `/aws/lambda/${serviceName}-customer-created-${stage}`,
+        retention: 7,
+        removalPolicy: RemovalPolicy.DESTROY,
+      },
+    );
+
+    const customerCreatedLambda = new TSLambdaFunction(
+      this,
+      `${serviceName}-customer-created-lambda-${stage}`,
+      {
+        serviceName,
+        stage,
+        handlerName: "handler",
+        entryPath: customerCreatedLambdaPath,
+        tsConfigPath,
+        functionName: `${serviceName}-customer-created-${stage}`,
+        customOptions: {
+          logGroup: customerCreatedLogGroup,
+          timeout: Duration.seconds(30),
+          memorySize: 256,
+          environment: {
+            STRIPE_SECRET_KEY,
+            STAGE: stage,
+            TARGET_EVENT_BUS_NAME: targetEventBusName,
+            IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
+          },
+        },
+      },
+    );
+
+    targetEventBus.grantPutEventsTo(customerCreatedLambda.tsLambdaFunction);
+    idempotencyTable.grantReadWriteData(customerCreatedLambda.tsLambdaFunction);
+
+    // EventBridge Rules for new handlers
+    const invoiceCreatedRule = new Rule(
+      this,
+      `${serviceName}-invoice-created-rule-${stage}`,
+      {
+        eventBus: stripeEventBus,
+        ruleName: `${serviceName}-invoice-created-rule-${stage}`,
+        eventPattern: {
+          source: [`aws.partner/stripe.com/${STRIPE_EVENT_BUS_ID}`],
+          detailType: ["invoice.created"],
+        },
+      },
+    );
+
+    invoiceCreatedRule.addTarget(
+      new LambdaFunction(invoiceCreatedLambda.tsLambdaFunction),
+    );
+
+    const invoicePaymentSucceededRule = new Rule(
+      this,
+      `${serviceName}-invoice-payment-succeeded-rule-${stage}`,
+      {
+        eventBus: stripeEventBus,
+        ruleName: `${serviceName}-invoice-payment-succeeded-rule-${stage}`,
+        eventPattern: {
+          source: [`aws.partner/stripe.com/${STRIPE_EVENT_BUS_ID}`],
+          detailType: ["invoice.payment_succeeded"],
+        },
+      },
+    );
+
+    invoicePaymentSucceededRule.addTarget(
+      new LambdaFunction(invoicePaymentSucceededLambda.tsLambdaFunction),
+    );
+
+    const invoicePaymentFailedRule = new Rule(
+      this,
+      `${serviceName}-invoice-payment-failed-rule-${stage}`,
+      {
+        eventBus: stripeEventBus,
+        ruleName: `${serviceName}-invoice-payment-failed-rule-${stage}`,
+        eventPattern: {
+          source: [`aws.partner/stripe.com/${STRIPE_EVENT_BUS_ID}`],
+          detailType: ["invoice.payment_failed"],
+        },
+      },
+    );
+
+    invoicePaymentFailedRule.addTarget(
+      new LambdaFunction(invoicePaymentFailedLambda.tsLambdaFunction),
+    );
+
+    const paymentMethodAttachedRule = new Rule(
+      this,
+      `${serviceName}-payment-method-attached-rule-${stage}`,
+      {
+        eventBus: stripeEventBus,
+        ruleName: `${serviceName}-payment-method-attached-rule-${stage}`,
+        eventPattern: {
+          source: [`aws.partner/stripe.com/${STRIPE_EVENT_BUS_ID}`],
+          detailType: ["payment_method.attached"],
+        },
+      },
+    );
+
+    paymentMethodAttachedRule.addTarget(
+      new LambdaFunction(paymentMethodAttachedLambda.tsLambdaFunction),
+    );
+
+    const customerCreatedRule = new Rule(
+      this,
+      `${serviceName}-customer-created-rule-${stage}`,
+      {
+        eventBus: stripeEventBus,
+        ruleName: `${serviceName}-customer-created-rule-${stage}`,
+        eventPattern: {
+          source: [`aws.partner/stripe.com/${STRIPE_EVENT_BUS_ID}`],
+          detailType: ["customer.created"],
+        },
+      },
+    );
+
+    customerCreatedRule.addTarget(
+      new LambdaFunction(customerCreatedLambda.tsLambdaFunction),
+    );
   }
 }
