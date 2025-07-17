@@ -69,6 +69,7 @@ export const subscriptionCreated =
           itemId: item.id,
           productId: product.id,
           productName: product.name,
+          productMetadata: product.metadata,
           priceId: item.price.id,
           priceData: {
             unitAmount: priceData.unit_amount,
@@ -171,6 +172,7 @@ export const subscriptionCreated =
               customerEmail: customer.email,
               productId: item.price.product,
               productName: product.name,
+              productMetadata: product.metadata,
               priceId: item.price.id,
               quantity: 1,
               status: subscription.status,

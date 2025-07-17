@@ -52,6 +52,7 @@ export async function handleQuantityChange({
           customer,
           item: currentItem,
           quantityDifference,
+          stripe,
           logger,
           dynamoDBClient,
           idempotencyTableName,

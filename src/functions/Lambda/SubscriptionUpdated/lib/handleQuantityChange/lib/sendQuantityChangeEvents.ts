@@ -3,6 +3,7 @@ import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type { SendQuantityChangeEvents } from "./sendQuantityChangeEvents.types";
 import type Stripe from "stripe";
 import type { Logger } from "../../../../types/utils.types";
+import type { StripeClient } from "../../../../types/stripe.types";
 import { ensureIdempotency, generateEventId } from "../../../../lib/idempotency";
 
 export const sendQuantityChangeEvents = async ({
@@ -12,6 +13,7 @@ export const sendQuantityChangeEvents = async ({
   customer,
   item,
   quantityDifference,
+  stripe,
   logger,
   dynamoDBClient,
   idempotencyTableName,
@@ -19,6 +21,7 @@ export const sendQuantityChangeEvents = async ({
   logger: Logger;
   dynamoDBClient: DynamoDBClient;
   idempotencyTableName: string;
+  stripe: StripeClient;
 }) => {
   const absoluteDifference = Math.abs(quantityDifference);
   logger.info("Processing quantity change for subscription", {
@@ -28,6 +31,9 @@ export const sendQuantityChangeEvents = async ({
   });
   
   try {
+    // Retrieve product data
+    const product = await stripe.products.retrieve(item.price.product as string);
+    
     const eventsToSend = [];
     
     for (let i = 0; i < absoluteDifference; i++) {
@@ -67,7 +73,8 @@ export const sendQuantityChangeEvents = async ({
             stripeCustomerId: subscription.customer,
             customerEmail: customer.email,
             productId: item.price.product,
-            productName: (item.price.product as Stripe.Product).name,
+            productName: product.name,
+            productMetadata: product.metadata,
             priceId: item.price.id,
             quantity: 1,
             status: subscription.status,
