@@ -88,6 +88,7 @@ export const subscriptionCreated =
       });
       logger.debug("Items processed for subscription", { items, subscriptionId: subscription.id });
 
+      // Send SubscriptionCreated event
       await eventBridgeClient.send(
         new PutEventsCommand({
           Entries: [
@@ -118,6 +119,98 @@ export const subscriptionCreated =
       logger.info("SubscriptionCreated event sent for subscription", { 
         subscriptionId: subscription.id 
       });
+
+      // Create LicenseCreated events for initial subscription quantity
+      const licenseEvents = [];
+      
+      for (const item of subscription.items.data) {
+        const quantity = item.quantity ?? 1;
+        
+        for (let i = 0; i < quantity; i++) {
+          // Generate idempotency key for license creation
+          const licenseEventId = generateEventId("license-created", `${subscription.id}-${item.id}-${i}`);
+          
+          // Check idempotency
+          const licenseIdempotencyResult = await ensureIdempotency(
+            { dynamoDBClient, tableName: idempotencyTableName, logger },
+            licenseEventId,
+            { 
+              subscriptionId: subscription.id, 
+              itemId: item.id, 
+              licenseIndex: i,
+              isInitialCreation: true
+            }
+          );
+
+          if (licenseIdempotencyResult.isDuplicate) {
+            logger.info("Initial license creation already processed, skipping", { 
+              subscriptionId: subscription.id,
+              itemId: item.id,
+              licenseIndex: i,
+              licenseEventId 
+            });
+            continue;
+          }
+
+          const product = productMap.get(item.price.product as string);
+          if (!product) {
+            logger.error("Missing product data for license creation", {
+              productId: item.price.product,
+              itemId: item.id,
+            });
+            continue;
+          }
+
+          licenseEvents.push({
+            Source: "service.stripe",
+            DetailType: "LicenseCreated",
+            EventBusName: eventBusName,
+            Detail: JSON.stringify({
+              stripeSubscriptionId: subscription.id,
+              stripeCustomerId: subscription.customer,
+              customerEmail: customer.email,
+              productId: item.price.product,
+              productName: product.name,
+              priceId: item.price.id,
+              quantity: 1,
+              status: subscription.status,
+              createdAt: subscription.created,
+              cancelAtPeriodEnd: subscription.cancel_at_period_end,
+              ...(subscription.trial_start && {
+                trialStart: subscription.trial_start,
+              }),
+              ...(subscription.trial_end && {
+                trialEnd: subscription.trial_end,
+              }),
+              expiresAt: item.current_period_end,
+              metadata: item.metadata,
+            }),
+          });
+        }
+      }
+
+      // Send license creation events in batches (max 10 per batch)
+      if (licenseEvents.length > 0) {
+        const batches = [];
+        for (let i = 0; i < licenseEvents.length; i += 10) {
+          batches.push(licenseEvents.slice(i, i + 10));
+        }
+
+        for (const batch of batches) {
+          await eventBridgeClient.send(
+            new PutEventsCommand({
+              Entries: batch,
+            }),
+          );
+        }
+
+        logger.info("Successfully sent initial license creation events", {
+          subscriptionId: subscription.id,
+          licenseCount: licenseEvents.length,
+          batchCount: Math.ceil(licenseEvents.length / 10),
+        });
+      }
+
     } catch (error) {
       logger.error("Error processing subscription", { 
         subscriptionId: subscription.id,

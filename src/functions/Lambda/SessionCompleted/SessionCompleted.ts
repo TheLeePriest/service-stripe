@@ -39,6 +39,12 @@ export const sessionCompleted =
     const organization = customerDetails?.name || customer.name || "";
     const now = new Date().toISOString();
 
+    // Extract firstName and lastName from customer name
+    const fullName = customer.name || customerDetails?.name || "";
+    const nameParts = fullName.trim().split(/\s+/);
+    const firstName = nameParts[0] || "";
+    const lastName = nameParts.slice(1).join(" ") || "";
+
     // Generate idempotency key for customer creation
     const eventId = generateEventId("customer-created", customer.id);
     
@@ -97,6 +103,8 @@ export const sessionCompleted =
                   : "",
                 cancelAtPeriodEnd: subscription.cancel_at_period_end,
                 organization: organization,
+                firstName: firstName,
+                lastName: lastName,
                 createdAt: now,
                 updatedAt: now,
               }),
@@ -109,6 +117,8 @@ export const sessionCompleted =
         customerId: customer.id,
         subscriptionId: subscription.id,
         email,
+        firstName,
+        lastName,
       });
     } catch (error) {
       logger.error("Error sending event to EventBridge", { 

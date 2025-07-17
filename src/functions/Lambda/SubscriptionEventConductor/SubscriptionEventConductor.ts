@@ -21,6 +21,8 @@ export const subscriptionEventConductor =
     eventBusSchedulerRoleArn,
     schedulerClient,
     logger,
+    dynamoDBClient,
+    idempotencyTableName,
   }: SubscriptionEventConductorDependencies & { logger: Logger }) =>
   async (event: EventBridgeEvent<string, StripeEventBridgeDetail>) => {
     const stripeEvent = event.detail;
@@ -69,6 +71,8 @@ export const subscriptionEventConductor =
           uuidv4,
           eventBridgeClient,
           eventBusName,
+          dynamoDBClient,
+          idempotencyTableName,
           logger,
         })(createdEvent);
         break;
@@ -120,6 +124,8 @@ export const subscriptionEventConductor =
           eventBusName,
           schedulerClient,
           stripe,
+          dynamoDBClient,
+          idempotencyTableName,
           logger,
         })(updatedEvent);
         break;
@@ -137,6 +143,8 @@ export const subscriptionEventConductor =
           stripe, 
           eventBridgeClient, 
           eventBusName,
+          dynamoDBClient,
+          idempotencyTableName,
           logger,
         })(deletedEvent);
         break;

@@ -48,6 +48,26 @@ export const createProduct =
       }
 
       const { licenseType } = metadata;
+      
+      // Enhanced feature metadata extraction
+      const featureMetadata = {
+        licenseType: metadata.licenseType || 'STANDARD',
+        tier: metadata.tier || 'free',
+        features: metadata.features || '{}', // JSON string of enabled features
+        maxUsage: metadata.maxUsage || '1000',
+        maxFingerprints: metadata.maxFingerprints || '5',
+        maxTeamMembers: metadata.maxTeamMembers || '1',
+        aiQuota: metadata.aiQuota || '100',
+        githubIntegration: metadata.githubIntegration === 'true',
+        prioritySupport: metadata.prioritySupport === 'true',
+        customRules: metadata.customRules === 'true',
+        advancedFormats: metadata.advancedFormats === 'true',
+        ciCdIntegration: metadata.ciCdIntegration === 'true',
+        trialDays: metadata.trialDays || '0',
+        upgradePath: metadata.upgradePath || '',
+        restrictions: metadata.restrictions || '{}', // JSON string of restrictions
+      };
+
       const now = new Date().toISOString();
 
       logger.info("Product created", {
@@ -55,6 +75,8 @@ export const createProduct =
         productName: product.name,
         priceIds,
         licenseType,
+        tier: featureMetadata.tier,
+        features: featureMetadata.features,
       });
 
       await dynamoDBClient.send(
@@ -80,6 +102,21 @@ export const createProduct =
             updatedAt: { S: now },
             priceIds: { SS: priceIds },
             licenseType: { S: licenseType },
+            // Enhanced feature metadata
+            tier: { S: featureMetadata.tier },
+            features: { S: featureMetadata.features },
+            maxUsage: { S: featureMetadata.maxUsage },
+            maxFingerprints: { S: featureMetadata.maxFingerprints },
+            maxTeamMembers: { S: featureMetadata.maxTeamMembers },
+            aiQuota: { S: featureMetadata.aiQuota },
+            githubIntegration: { BOOL: featureMetadata.githubIntegration },
+            prioritySupport: { BOOL: featureMetadata.prioritySupport },
+            customRules: { BOOL: featureMetadata.customRules },
+            advancedFormats: { BOOL: featureMetadata.advancedFormats },
+            ciCdIntegration: { BOOL: featureMetadata.ciCdIntegration },
+            trialDays: { S: featureMetadata.trialDays },
+            upgradePath: { S: featureMetadata.upgradePath },
+            restrictions: { S: featureMetadata.restrictions },
           },
           ConditionExpression:
             "attribute_not_exists(PK) OR #updatedAt < :updatedAt",

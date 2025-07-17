@@ -6,16 +6,38 @@ export const sendUsageToStripe =
   async (event: SQSEvent) => {
     const meterEvents = [];
 
-    logger.info("Processing SQS usage events", {
+    logger.info("SendUsageToStripe handler invoked", {
       recordCount: event.Records.length,
+      requestId: event.Records[0]?.attributes?.MessageDeduplicationId || "unknown",
+    });
+
+    logger.debug("Raw SQS event structure", {
+      event: JSON.stringify(event, null, 2),
     });
 
     for (const record of event.Records) {
       try {
+        logger.debug("Processing SQS record", {
+          messageId: record.messageId,
+          receiptHandle: record.receiptHandle,
+          body: record.body,
+        });
+
         const body = JSON.parse(record.body);
-        logger.debug("Processing record", { recordBody: body });
+        logger.debug("Parsed record body", { 
+          recordBody: body,
+          hasDetail: !!body.detail,
+          detailKeys: body.detail ? Object.keys(body.detail) : [],
+        });
+
         const { detail } = body;
         const { stripeCustomerId, resourcesAnalyzed } = detail;
+
+        logger.info("Extracted usage data", {
+          stripeCustomerId: stripeCustomerId?.S,
+          resourcesAnalyzed,
+          hasRequiredFields: !!(stripeCustomerId?.S && resourcesAnalyzed),
+        });
 
         if (!stripeCustomerId || !resourcesAnalyzed) {
           logger.warn("Missing fields, skipping record", { 
@@ -28,7 +50,7 @@ export const sendUsageToStripe =
           continue;
         }
 
-        meterEvents.push({
+        const meterEvent = {
           event_name: "pro_analysis_usage",
           payload: {
             stripe_customer_id: stripeCustomerId.S,
@@ -36,7 +58,13 @@ export const sendUsageToStripe =
           },
           identifier: record.messageId,
           timestamp: Math.floor(Date.now() / 1000),
+        };
+
+        logger.debug("Created meter event", {
+          meterEvent,
         });
+
+        meterEvents.push(meterEvent);
 
         logger.logUsageEvent(stripeCustomerId.S, {
           resourcesAnalyzed,
@@ -46,20 +74,32 @@ export const sendUsageToStripe =
         logger.error("Failed to parse record body", {
           recordBody: record.body,
           error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
         });
       }
     }
 
-    logger.info("Sending meter events to Stripe", {
+    logger.info("Preparing to send meter events to Stripe", {
       eventCount: meterEvents.length,
+      events: meterEvents.map(e => ({
+        customerId: e.payload.stripe_customer_id,
+        value: e.payload.value,
+        identifier: e.identifier,
+      })),
     });
 
     const results = await Promise.allSettled(
-      meterEvents.map((event) =>
-        stripeClient.billing.meterEvents.create(event, {
-          idempotencyKey: `usage-${event.identifier}-${event.timestamp}`,
-        }),
-      ),
+      meterEvents.map((event) => {
+        const idempotencyKey = `usage-${event.identifier}-${event.timestamp}`;
+        logger.debug("Sending meter event to Stripe", {
+          event,
+          idempotencyKey,
+        });
+        
+        return stripeClient.billing.meterEvents.create(event, {
+          idempotencyKey,
+        });
+      }),
     );
 
     const failed = results.filter((r) => r.status === "rejected");
@@ -77,5 +117,9 @@ export const sendUsageToStripe =
 
     logger.info("Successfully sent meter events to Stripe", {
       sentCount: meterEvents.length,
+      events: meterEvents.map(e => ({
+        customerId: e.payload.stripe_customer_id,
+        value: e.payload.value,
+      })),
     });
   };

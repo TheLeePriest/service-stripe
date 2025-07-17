@@ -64,7 +64,7 @@ export const handleCancellation = async ({
         Entries: [
           {
             Source: "service.stripe",
-            DetailType: "SubscriptionCancelled",
+                          DetailType: "SubscriptionCancelled",
             EventBusName: eventBusName,
             Detail: JSON.stringify({
               stripeSubscriptionId: subscription.id,

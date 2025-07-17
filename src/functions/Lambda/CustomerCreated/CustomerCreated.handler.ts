@@ -28,10 +28,9 @@ const logger = createStripeLogger(
 );
 
 export const customerCreatedHandler = customerCreated({
-	stripe,
 	eventBridgeClient,
-	dynamoDBClient,
 	eventBusName,
+	dynamoDBClient,
 	idempotencyTableName,
 	logger,
 }); 
