@@ -95,20 +95,40 @@ describe("subscriptionCreated", () => {
     expect(mockRetrieveCustomer).toHaveBeenCalledWith("cus_123");
     expect(mockRetrieveProduct).toHaveBeenCalledWith("prod_123");
     expect(mockRetrievePrice).toHaveBeenCalledWith("price_123");
-    expect(mockSend).toHaveBeenCalledTimes(1);
+    
+    // We now send SubscriptionCreated + LicenseCreated events (2 licenses for quantity=2)
+    expect(mockSend).toHaveBeenCalledTimes(2);
 
-    const sentCommand = mockSend.mock.calls[0][0];
-    expect(sentCommand).toBeInstanceOf(PutEventsCommand);
+    // First call should be SubscriptionCreated
+    const subscriptionCommand = mockSend.mock.calls[0][0];
+    expect(subscriptionCommand).toBeInstanceOf(PutEventsCommand);
 
-    const entries = sentCommand.input.Entries;
-    expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({
+    const subscriptionEntries = subscriptionCommand.input.Entries;
+    expect(subscriptionEntries).toHaveLength(1);
+    expect(subscriptionEntries[0]).toMatchObject({
       Source: "service.stripe",
       DetailType: "SubscriptionCreated",
       EventBusName: mockEventBusName,
     });
 
-    const detail = JSON.parse(entries[0].Detail);
+    // Second call should be LicenseCreated events (batch of 2)
+    const licenseCommand = mockSend.mock.calls[1][0];
+    expect(licenseCommand).toBeInstanceOf(PutEventsCommand);
+
+    const licenseEntries = licenseCommand.input.Entries;
+    expect(licenseEntries).toHaveLength(2); // 2 licenses for quantity=2
+    expect(licenseEntries[0]).toMatchObject({
+      Source: "service.stripe",
+      DetailType: "LicenseCreated",
+      EventBusName: mockEventBusName,
+    });
+    expect(licenseEntries[1]).toMatchObject({
+      Source: "service.stripe",
+      DetailType: "LicenseCreated",
+      EventBusName: mockEventBusName,
+    });
+
+    const detail = JSON.parse(subscriptionEntries[0].Detail);
     expect(detail).toMatchObject({
       stripeSubscriptionId: "sub_123",
       stripeCustomerId: "cus_123",

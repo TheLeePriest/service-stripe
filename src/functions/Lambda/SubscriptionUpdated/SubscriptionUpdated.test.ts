@@ -138,9 +138,14 @@ describe("subscriptionUpdated", () => {
     await subscriptionUpdated(dependencies)(event);
     expect(mockHandleCancellation).not.toHaveBeenCalled();
     expect(mockHandleUncancellation).not.toHaveBeenCalled();
-    expect(mockLogger.info).toHaveBeenCalledWith("Subscription updated", {
+    expect(mockLogger.info).toHaveBeenCalledWith("Subscription updated (other change)", {
       subscriptionId: event.id,
       status: event.status,
+      changes: {
+        cancelAtPeriodEndChanged: true,
+        currentPeriodEndChanged: true,
+        statusChanged: true,
+      },
     });
   });
 
@@ -153,6 +158,8 @@ describe("subscriptionUpdated", () => {
     expect(mockLogger.error).toHaveBeenCalledWith("Error processing subscription", {
       subscriptionId: event.id,
       error: "fail!",
+      stack: expect.any(String),
+      status: "active",
     });
   });
 });
