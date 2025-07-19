@@ -68,17 +68,7 @@ export const invoicePaymentFailed =
         invoice: JSON.stringify(invoice, null, 2),
       });
 
-      if (!invoice.id || !invoice.customer || !invoice.status || !invoice.amount_due || !invoice.currency) {
-        logger.error("Missing required invoice fields", {
-          invoiceId: invoice.id,
-          customerId: invoice.customer,
-          status: invoice.status,
-          amountDue: invoice.amount_due,
-          currency: invoice.currency,
-        });
-        throw new Error("Invoice missing required fields: id, customer, status, amount_due, or currency");
-      }
-
+      // Check for required fields with proper field name mapping
       const stripeInvoiceId = invoice.id as string;
       const customer = invoice.customer as string;
       const subscription = invoice.subscription as string | undefined;
@@ -87,6 +77,17 @@ export const invoicePaymentFailed =
       const currency = invoice.currency as string;
       const attempt_count = invoice.attempt_count as number | undefined;
       const created = invoice.created as number;
+
+      if (!stripeInvoiceId || !customer || !status || amount_due === undefined || !currency) {
+        logger.error("Missing required invoice fields", {
+          invoiceId: stripeInvoiceId,
+          customerId: customer,
+          status: status,
+          amountDue: amount_due,
+          currency: currency,
+        });
+        throw new Error("Invoice missing required fields: id, customer, status, amount_due, or currency");
+      }
 
       logger.logStripeEvent("invoice.payment_failed", stripeEvent as Record<string, unknown>);
 
