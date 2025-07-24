@@ -83,10 +83,19 @@ export const sessionCompleted =
               DetailType: "CustomerCreated",
               EventBusName: eventBusName,
               Detail: JSON.stringify({
+                stripeCustomerId: customer.id,
+                customerEmail: email,
+                customerName: customer.name,
+                createdAt: Math.floor(Date.now() / 1000),
+                customerData: {
+                  id: customer.id,
+                  email: email,
+                  name: customer.name,
+                },
+                // Additional fields for other services
                 userName: email,
                 name: customer.name,
                 signUpDate: now,
-                stripeCustomerId: customer.id,
                 stripeSubscriptionId: subscription.id,
                 subscriptionStatus: subscription.status,
                 planId: planItem.plan.product,
@@ -105,7 +114,6 @@ export const sessionCompleted =
                 organization: organization,
                 firstName: firstName,
                 lastName: lastName,
-                createdAt: now,
                 updatedAt: now,
               }),
             },

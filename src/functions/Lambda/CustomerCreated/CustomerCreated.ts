@@ -77,11 +77,19 @@ export const customerCreated =
 
       // Emit EventBridge event for downstream services
       const eventDetail = {
+        stripeCustomerId: customerId,
+        customerEmail: customerEmail,
+        customerName: customerName,
+        createdAt: customer.created,
+        customerData: {
+          id: customerId,
+          email: customerEmail,
+          name: customerName,
+        },
+        // Additional fields for other services
         customerId,
         email: customerEmail,
         name: customerName,
-        stripeCustomerId: customerId,
-        createdAt: customer.created,
         metadata: customer.metadata,
       };
 
