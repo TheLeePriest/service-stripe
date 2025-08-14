@@ -96,10 +96,10 @@ describe("subscriptionCreated", () => {
     expect(mockRetrieveProduct).toHaveBeenCalledWith("prod_123");
     expect(mockRetrievePrice).toHaveBeenCalledWith("price_123");
     
-    // We now send SubscriptionCreated + LicenseCreated events (2 licenses for quantity=2)
-    expect(mockSend).toHaveBeenCalledTimes(2);
+    // We now send only SubscriptionCreated event
+    expect(mockSend).toHaveBeenCalledTimes(1);
 
-    // First call should be SubscriptionCreated
+    // Should send SubscriptionCreated event
     const subscriptionCommand = mockSend.mock.calls[0][0];
     expect(subscriptionCommand).toBeInstanceOf(PutEventsCommand);
 
@@ -108,23 +108,6 @@ describe("subscriptionCreated", () => {
     expect(subscriptionEntries[0]).toMatchObject({
       Source: "service.stripe",
       DetailType: "SubscriptionCreated",
-      EventBusName: mockEventBusName,
-    });
-
-    // Second call should be LicenseCreated events (batch of 2)
-    const licenseCommand = mockSend.mock.calls[1][0];
-    expect(licenseCommand).toBeInstanceOf(PutEventsCommand);
-
-    const licenseEntries = licenseCommand.input.Entries;
-    expect(licenseEntries).toHaveLength(2); // 2 licenses for quantity=2
-    expect(licenseEntries[0]).toMatchObject({
-      Source: "service.stripe",
-      DetailType: "LicenseCreated",
-      EventBusName: mockEventBusName,
-    });
-    expect(licenseEntries[1]).toMatchObject({
-      Source: "service.stripe",
-      DetailType: "LicenseCreated",
       EventBusName: mockEventBusName,
     });
 
