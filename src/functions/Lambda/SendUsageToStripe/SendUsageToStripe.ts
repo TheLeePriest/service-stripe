@@ -2,7 +2,7 @@ import type { SQSEvent } from "aws-lambda";
 import type { SendUsageToStripeDependencies } from "./SendUsageToStripe.types";
 
 export const sendUsageToStripe =
-  ({ stripeClient, logger }: SendUsageToStripeDependencies) =>
+  ({ stripeClient, logger, config }: SendUsageToStripeDependencies) =>
   async (event: SQSEvent) => {
     const meterEvents = [];
 
@@ -31,11 +31,13 @@ export const sendUsageToStripe =
         });
 
         const { detail } = body;
-        const { stripeCustomerId, resourcesAnalyzed } = detail;
+        const { stripeCustomerId, resourcesAnalyzed, subscriptionType, meteredPriceId } = detail;
 
         logger.info("Extracted usage data", {
           stripeCustomerId: stripeCustomerId?.S,
           resourcesAnalyzed,
+          subscriptionType,
+          meteredPriceId,
           hasRequiredFields: !!(stripeCustomerId?.S && resourcesAnalyzed),
         });
 
@@ -50,11 +52,36 @@ export const sendUsageToStripe =
           continue;
         }
 
+        // Determine the correct event name and price ID based on subscription type
+        let eventName: string;
+        let priceId: string | undefined;
+
+        if (subscriptionType === "TEAM" || subscriptionType === "ENTERPRISE") {
+          // Enterprise/Team subscription - use Enterprise usage price
+          eventName = "enterprise_analysis_usage";
+          priceId = config.enterpriseUsagePriceId;
+          logger.info("Using Enterprise usage price", {
+            eventName,
+            priceId,
+            subscriptionType,
+          });
+        } else {
+          // Individual/Pro subscription - use Pro usage price
+          eventName = "pro_analysis_usage";
+          priceId = meteredPriceId;
+          logger.info("Using Pro usage price", {
+            eventName,
+            priceId,
+            subscriptionType,
+          });
+        }
+
         const meterEvent = {
-          event_name: "pro_analysis_usage",
+          event_name: eventName,
           payload: {
             stripe_customer_id: stripeCustomerId.S,
             value: resourcesAnalyzed,
+            ...(priceId && { price_id: priceId }), // Include price_id if available
           },
           identifier: record.messageId,
           timestamp: Math.floor(Date.now() / 1000),
@@ -69,6 +96,9 @@ export const sendUsageToStripe =
         logger.logUsageEvent(stripeCustomerId.S, {
           resourcesAnalyzed,
           messageId: record.messageId,
+          subscriptionType,
+          eventName,
+          priceId,
         });
       } catch (err) {
         logger.error("Failed to parse record body", {
@@ -85,6 +115,8 @@ export const sendUsageToStripe =
         customerId: e.payload.stripe_customer_id,
         value: e.payload.value,
         identifier: e.identifier,
+        eventName: e.event_name,
+        priceId: e.payload.price_id,
       })),
     });
 
@@ -120,6 +152,8 @@ export const sendUsageToStripe =
       events: meterEvents.map(e => ({
         customerId: e.payload.stripe_customer_id,
         value: e.payload.value,
+        eventName: e.event_name,
+        priceId: e.payload.price_id,
       })),
     });
   };

@@ -15,4 +15,7 @@ const logger = createStripeLogger(
 export const sendUsageToStripeHandler = sendUsageToStripe({
   stripeClient: stripe,
   logger,
+  config: {
+    enterpriseUsagePriceId: env.get("STRIPE_ENTERPRISE_USAGE_PRICE_ID"),
+  },
 });

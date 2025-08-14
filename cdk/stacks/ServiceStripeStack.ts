@@ -129,6 +129,13 @@ export class ServiceStripeStack extends Stack {
           memorySize: 256,
           environment: {
             STRIPE_SECRET_KEY,
+            STRIPE_ENTERPRISE_USAGE_PRICE_ID: StringParameter.fromStringParameterAttributes(
+              this,
+              `${serviceName}-enterprise-usage-price-id-${stage}`,
+              {
+                parameterName: `/${stage}/stripe/enterprise-usage-price-id`,
+              },
+            ).stringValue,
           },
         },
       },
