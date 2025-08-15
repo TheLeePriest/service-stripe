@@ -101,6 +101,7 @@ export const subscriptionCreated =
                 stripeSubscriptionId: subscription.id,
                 stripeCustomerId: subscription.customer,
                 customerEmail: customer.email,
+                customerName: customer.name,
                 items,
                 status: subscription.status,
                 createdAt: subscription.created,

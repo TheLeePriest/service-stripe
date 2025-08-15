@@ -24,7 +24,7 @@ export type SubscriptionCreatedEvent = {
       price: { product: string; id: string };
       quantity: number;
       current_period_end: number;
-      metadata?: Stripe.Metadata;
+    metadata?: Stripe.Metadata;
     }>;
   };
   customer: string;
