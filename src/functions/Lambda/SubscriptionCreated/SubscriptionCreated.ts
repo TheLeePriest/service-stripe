@@ -12,7 +12,7 @@ export const subscriptionCreated =
   async (subscription: SubscriptionCreatedEvent) => {
     
     const { stripe, eventBridgeClient, dynamoDBClient, eventBusName, idempotencyTableName, logger } = dependencies;
-
+    console.log("subscription", subscription);
     logger.logStripeEvent("customer.subscription.created", subscription as unknown as Record<string, unknown>);
     logger.info("Processing subscription created", { subscription });
     // Generate idempotency key
