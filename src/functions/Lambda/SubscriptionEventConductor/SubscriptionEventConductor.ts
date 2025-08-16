@@ -31,6 +31,7 @@ export const subscriptionEventConductor =
     logger.info("Processing subscription event", {
       eventType: stripeEvent.type,
       subscriptionId: subscription.id,
+      stripeEvent,
     });
 
     switch (stripeEvent.type) {
@@ -66,6 +67,9 @@ export const subscriptionEventConductor =
           }),
           created: subscription.created,
         };
+
+        logger.info("Sending subscription created event", { createdEvent });  
+
         await subscriptionCreated({
           stripe,
           uuidv4,

@@ -120,7 +120,8 @@ export const subscriptionCreated =
       );
 
       logger.info("SubscriptionCreated event sent for subscription", { 
-        subscriptionId: subscription.id 
+        subscriptionId: subscription.id,
+        subscription: subscription
       });
       
       logger.info("Subscription creation processed successfully", {
