@@ -89,7 +89,7 @@ export const subscriptionCreated =
         customerId: customer.id 
       });
       logger.debug("Items processed for subscription", { items, subscriptionId: subscription.id });
-
+      console.log(subscription, 'subscription before event')
       // Send SubscriptionCreated event
       await eventBridgeClient.send(
         new PutEventsCommand({
