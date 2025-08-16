@@ -10,6 +10,7 @@ import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 export const subscriptionCreated =
   (dependencies: SubscriptionCreatedDependencies & { logger: Logger }) =>
   async (subscription: SubscriptionCreatedEvent) => {
+    console.log("subscription", subscription);
     const { stripe, eventBridgeClient, dynamoDBClient, eventBusName, idempotencyTableName, logger } = dependencies;
 
     logger.logStripeEvent("customer.subscription.created", subscription as unknown as Record<string, unknown>);
