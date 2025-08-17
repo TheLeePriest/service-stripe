@@ -114,8 +114,23 @@ export const sendUsageToStripe =
           timestamp: Math.floor(Date.now() / 1000),
         };
 
-        logger.debug("Created meter event", {
+        // Validate that the required fields are present
+        if (!meterEvent.payload.stripe_customer_id) {
+          logger.error("Meter event payload missing stripe_customer_id", {
+            meterEvent,
+            stripeCustomerId,
+            stripeCustomerIdType: typeof stripeCustomerId,
+            payloadKeys: Object.keys(meterEvent.payload),
+          });
+          throw new Error("Meter event payload missing required stripe_customer_id field");
+        }
+
+        // Add detailed debugging for the meter event payload
+        logger.debug("Created meter event with detailed payload info", {
           meterEvent,
+          payloadKeys: Object.keys(meterEvent.payload),
+          stripeCustomerIdInPayload: meterEvent.payload.stripe_customer_id,
+          payloadStringified: JSON.stringify(meterEvent.payload),
           isOverusage,
           overusageAmount,
           resourcesAnalyzed,
@@ -155,8 +170,13 @@ export const sendUsageToStripe =
     const results = await Promise.allSettled(
       meterEvents.map((event) => {
         const idempotencyKey = `usage-${event.identifier}-${event.timestamp}`;
-        logger.debug("Sending meter event to Stripe", {
+        
+        // Add debugging to see the final event structure before sending
+        logger.debug("Sending meter event to Stripe - final structure", {
           event,
+          eventPayload: event.payload,
+          payloadKeys: Object.keys(event.payload),
+          stripeCustomerId: event.payload.stripe_customer_id,
           idempotencyKey,
         });
         
