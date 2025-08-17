@@ -136,6 +136,7 @@ export class ServiceStripeStack extends Stack {
                 parameterName: `/${stage}/stripe/enterprise-usage-price-id`,
               },
             ).stringValue,
+            STAGE: stage,
           },
         },
       },
