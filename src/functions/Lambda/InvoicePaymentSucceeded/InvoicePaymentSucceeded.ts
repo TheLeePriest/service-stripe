@@ -117,6 +117,75 @@ export const invoicePaymentSucceeded =
       // Retrieve customer details
       const customerData = await stripe.customers.retrieve(customer) as Stripe.Customer;
 
+      // Check if this payment represents a renewal by fetching current subscription details
+      let isRenewal = false;
+      let renewalData: {
+        currentPeriodStart: string;
+        currentPeriodEnd: string;
+        cancelAtPeriodEnd: boolean;
+      } | null = null;
+
+      if (subscription) {
+        try {
+          logger.debug("Fetching subscription details to check for renewal", {
+            subscriptionId: subscription,
+          });
+
+          const stripeSubscription = await stripe.subscriptions.retrieve(subscription);
+          
+          // Check if this is a renewal by comparing current period start with the invoice creation time
+          // A renewal typically has a current_period_start that's close to or after the invoice creation
+          const invoiceTime = created * 1000; // Convert to milliseconds
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const periodStartTime = (stripeSubscription as any).current_period_start * 1000;
+          const timeDifference = Math.abs(invoiceTime - periodStartTime);
+          
+          // Consider it a renewal if the period start is within 24 hours of the invoice creation
+          // This accounts for timezone differences and slight delays in webhook processing
+          const RENEWAL_TIME_THRESHOLD = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+          
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          isRenewal = timeDifference <= RENEWAL_TIME_THRESHOLD && 
+                     stripeSubscription.status === 'active' &&
+                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                     !(stripeSubscription as any).cancel_at_period_end;
+
+          if (isRenewal) {
+            renewalData = {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              currentPeriodStart: (stripeSubscription as any).current_period_start.toString(),
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              currentPeriodEnd: (stripeSubscription as any).current_period_end.toString(),
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              cancelAtPeriodEnd: (stripeSubscription as any).cancel_at_period_end,
+            };
+
+            logger.info("Payment identified as renewal", {
+              subscriptionId: subscription,
+              invoiceTime: new Date(invoiceTime).toISOString(),
+              periodStartTime: new Date(periodStartTime).toISOString(),
+              timeDifference: `${Math.round(timeDifference / (1000 * 60))} minutes`,
+              isRenewal,
+            });
+          } else {
+            logger.debug("Payment not identified as renewal", {
+              subscriptionId: subscription,
+              invoiceTime: new Date(invoiceTime).toISOString(),
+              periodStartTime: new Date(periodStartTime).toISOString(),
+              timeDifference: `${Math.round(timeDifference / (1000 * 60))} minutes`,
+              subscriptionStatus: stripeSubscription.status,
+              cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+            });
+          }
+        } catch (stripeError) {
+          logger.warn("Failed to fetch subscription details for renewal check, proceeding without renewal detection", {
+            subscriptionId: subscription,
+            error: stripeError instanceof Error ? stripeError.message : String(stripeError),
+          });
+          // Continue without renewal detection if we can't fetch subscription details
+        }
+      }
+
       logger.info("Processing invoice payment success", {
         invoiceId: stripeInvoiceId,
         customerId: customer,
@@ -124,9 +193,10 @@ export const invoicePaymentSucceeded =
         status,
         amountPaid: amount_paid,
         currency,
+        isRenewal,
       });
 
-      // Send event to EventBridge
+      // Send enhanced event to EventBridge with renewal information
       await eventBridgeClient.send(
         new PutEventsCommand({
           Entries: [
@@ -142,6 +212,9 @@ export const invoicePaymentSucceeded =
                 amountPaid: amount_paid,
                 currency,
                 createdAt: created,
+                // Include renewal information for downstream services
+                isRenewal,
+                renewalData,
                 customerData: {
                   id: customerData.id,
                   email: customerData.email,
