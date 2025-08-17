@@ -41,24 +41,32 @@ export const sendUsageToStripe =
           licenseType
         } = detail;
 
+        // Add detailed debugging to understand the data structure
+        logger.debug("Raw stripeCustomerId structure", {
+          stripeCustomerId,
+          stripeCustomerIdType: typeof stripeCustomerId,
+          stripeCustomerIdKeys: stripeCustomerId ? Object.keys(stripeCustomerId) : null,
+        });
+
         logger.info("Extracted usage data", {
-          stripeCustomerId: stripeCustomerId?.S,
+          stripeCustomerId,
           resourcesAnalyzed,
           subscriptionType,
           meteredPriceId,
           isOverusage,
           overusageAmount,
           licenseType,
-          hasRequiredFields: !!(stripeCustomerId?.S && resourcesAnalyzed),
+          hasRequiredFields: !!(stripeCustomerId && resourcesAnalyzed),
         });
 
         if (!stripeCustomerId || !resourcesAnalyzed) {
-          logger.warn("Missing fields, skipping record", { 
+          logger.warn("Missing required fields, skipping record", { 
             recordBody: body,
             missingFields: {
               stripeCustomerId: !stripeCustomerId,
               resourcesAnalyzed: !resourcesAnalyzed,
-            }
+            },
+            stripeCustomerId,
           });
           continue;
         }
@@ -98,7 +106,7 @@ export const sendUsageToStripe =
         const meterEvent = {
           event_name: eventName,
           payload: {
-            stripe_customer_id: stripeCustomerId.S,
+            stripe_customer_id: stripeCustomerId,
             value: resourcesAnalyzed, // Always send the full resources analyzed for metered pricing
             ...(priceId && { price_id: priceId }), // Include price_id if available
           },
@@ -115,7 +123,7 @@ export const sendUsageToStripe =
 
         meterEvents.push(meterEvent);
 
-        logger.logUsageEvent(stripeCustomerId.S, {
+        logger.logUsageEvent(stripeCustomerId, {
           resourcesAnalyzed,
           messageId: record.messageId,
           subscriptionType,
@@ -177,7 +185,6 @@ export const sendUsageToStripe =
         customerId: e.payload.stripe_customer_id,
         value: e.payload.value,
         eventName: e.event_name,
-        priceId: e.payload.price_id,
       })),
     });
   };
