@@ -31,13 +31,24 @@ export const sendUsageToStripe =
         });
 
         const { detail } = body;
-        const { stripeCustomerId, resourcesAnalyzed, subscriptionType, meteredPriceId } = detail;
+        const { 
+          stripeCustomerId, 
+          resourcesAnalyzed, 
+          subscriptionType, 
+          meteredPriceId,
+          isOverusage,
+          overusageAmount,
+          licenseType
+        } = detail;
 
         logger.info("Extracted usage data", {
           stripeCustomerId: stripeCustomerId?.S,
           resourcesAnalyzed,
           subscriptionType,
           meteredPriceId,
+          isOverusage,
+          overusageAmount,
+          licenseType,
           hasRequiredFields: !!(stripeCustomerId?.S && resourcesAnalyzed),
         });
 
@@ -60,27 +71,35 @@ export const sendUsageToStripe =
           // Enterprise/Team subscription - use Enterprise usage price
           eventName = "enterprise_analysis_usage";
           priceId = config.enterpriseUsagePriceId;
+          
           logger.info("Using Enterprise usage price", {
             eventName,
             priceId,
             subscriptionType,
+            isOverusage,
+            overusageAmount,
           });
         } else {
           // Individual/Pro subscription - use Pro usage price
           eventName = "pro_analysis_usage";
           priceId = meteredPriceId;
+          
           logger.info("Using Pro usage price", {
             eventName,
             priceId,
             subscriptionType,
+            isOverusage,
+            overusageAmount,
           });
         }
 
+        // Always send meter events to Stripe for metered pricing
+        // Stripe needs to know about ALL usage to track when customers hit tier limits (e.g., 10k resources)
         const meterEvent = {
           event_name: eventName,
           payload: {
             stripe_customer_id: stripeCustomerId.S,
-            value: resourcesAnalyzed,
+            value: resourcesAnalyzed, // Always send the full resources analyzed for metered pricing
             ...(priceId && { price_id: priceId }), // Include price_id if available
           },
           identifier: record.messageId,
@@ -89,6 +108,9 @@ export const sendUsageToStripe =
 
         logger.debug("Created meter event", {
           meterEvent,
+          isOverusage,
+          overusageAmount,
+          resourcesAnalyzed,
         });
 
         meterEvents.push(meterEvent);
@@ -99,6 +121,8 @@ export const sendUsageToStripe =
           subscriptionType,
           eventName,
           priceId,
+          isOverusage,
+          overusageAmount,
         });
       } catch (err) {
         logger.error("Failed to parse record body", {
