@@ -5,6 +5,7 @@ import type {
 import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type Stripe from "stripe";
 import type { StripeClient } from "../types/stripe.types";
+import type { Logger } from "../types/utils.types";
 
 export type SubscriptionCreatedDependencies = {
   stripe: StripeClient;
@@ -15,6 +16,7 @@ export type SubscriptionCreatedDependencies = {
   dynamoDBClient: DynamoDBClient;
   eventBusName: string;
   idempotencyTableName: string;
+  logger: Logger;
 };
 
 export type SubscriptionCreatedEvent = {
@@ -24,7 +26,7 @@ export type SubscriptionCreatedEvent = {
       price: { product: string; id: string };
       quantity: number;
       current_period_end: number;
-    metadata?: Stripe.Metadata;
+      metadata?: Stripe.Metadata;
     }>;
   };
   customer: string;
@@ -34,4 +36,25 @@ export type SubscriptionCreatedEvent = {
   trial_start?: number | null;
   trial_end?: number | null;
   created: number;
+};
+
+// Type for processed subscription items with team detection
+export type ProcessedSubscriptionItem = {
+  itemId: string;
+  productId: string;
+  productName: string;
+  productMetadata: Stripe.Metadata;
+  priceId: string;
+  priceData: {
+    unitAmount: number | null;
+    currency: string;
+    recurring: Stripe.Price.Recurring | null;
+    metadata: Stripe.Metadata;
+  };
+  quantity: number;
+  expiresAt: number;
+  metadata: Stripe.Metadata;
+  // Team detection fields
+  isTeamSubscription: boolean;
+  teamSize?: number;
 };

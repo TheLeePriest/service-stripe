@@ -2,13 +2,14 @@ import type Stripe from "stripe";
 import type {
   SubscriptionCreatedEvent,
   SubscriptionCreatedDependencies,
+  ProcessedSubscriptionItem,
 } from "./SubscriptionCreated.types";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import type { Logger } from "../types/utils.types";
 import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 
 export const subscriptionCreated =
-  (dependencies: SubscriptionCreatedDependencies & { logger: Logger }) =>
+  (dependencies: SubscriptionCreatedDependencies) =>
   async (subscription: SubscriptionCreatedEvent) => {
     
     const { stripe, eventBridgeClient, dynamoDBClient, eventBusName, idempotencyTableName, logger } = dependencies;
@@ -54,7 +55,7 @@ export const subscriptionCreated =
       );
       const priceMap = new Map(prices.map(price => [price.id, price]));
 
-      const items = subscription.items.data.map((item) => {
+      const items: ProcessedSubscriptionItem[] = subscription.items.data.map((item) => {
         const product = productMap.get(item.price.product as string);
         const priceData = priceMap.get(item.price.id);
         
@@ -62,7 +63,16 @@ export const subscriptionCreated =
           throw new Error(`Missing product or price data for item ${item.id}`);
         }
 
-        logger.debug("Processing subscription item", { item });
+        // Detect if this is a team subscription based on product tier
+        const isTeamSubscription = product.metadata?.tier === 'enterprise';
+        const teamSize = isTeamSubscription ? item.quantity : undefined;
+
+        logger.debug("Processing subscription item", { 
+          item,
+          productTier: product.metadata?.tier,
+          isTeamSubscription,
+          teamSize,
+        });
         logger.debug("Retrieved price data", { priceData });
         logger.debug("Retrieved product", { product, itemId: item.id });
         
@@ -70,25 +80,85 @@ export const subscriptionCreated =
           itemId: item.id,
           productId: product.id,
           productName: product.name,
-          productMetadata: product.metadata,
+          productMetadata: product.metadata || {},
           priceId: item.price.id,
           priceData: {
             unitAmount: priceData.unit_amount,
             currency: priceData.currency,
             recurring: priceData.recurring,
-            metadata: priceData.metadata,
+            metadata: priceData.metadata || {},
           },
           quantity: item.quantity,
           expiresAt: item.current_period_end,
-          metadata: item.metadata,
+          metadata: item.metadata || {},
+          isTeamSubscription,
+          teamSize,
         };
       });
 
       logger.info("Processing subscription for customer", { 
         subscriptionId: subscription.id, 
-        customerId: customer.id 
+        customerId: customer.id,
+        totalItems: items.length,
+        teamItems: items.filter(item => item.isTeamSubscription).length,
+        individualItems: items.filter(item => !item.isTeamSubscription).length,
       });
       logger.debug("Items processed for subscription", { items, subscriptionId: subscription.id });
+      
+      // Log team detection summary
+      const teamItems = items.filter(item => item.isTeamSubscription);
+      if (teamItems.length > 0) {
+        logger.info("Team subscription detected", {
+          subscriptionId: subscription.id,
+          teamItems: teamItems.map(item => ({
+            productName: item.productName,
+            productTier: item.productMetadata?.tier,
+            teamSize: item.teamSize,
+            quantity: item.quantity,
+          })),
+        });
+      } else {
+        logger.info("Individual subscription detected", {
+          subscriptionId: subscription.id,
+          items: items.map(item => ({
+            productName: item.productName,
+            productTier: item.productMetadata?.tier,
+            quantity: item.quantity,
+          })),
+        });
+      }
+
+      // ============================================================================
+      // TEAM DETECTION (TEAM SUBSCRIPTIONS ONLY)
+      // ============================================================================
+      
+      let teamContext: {
+        isTeamSubscription: boolean;
+        teamSize: number;
+        productName: string;
+        productTier: string;
+      } | undefined;
+
+      if (teamItems.length > 0) {
+        logger.info("Team subscription detected - emitting team context", {
+          subscriptionId: subscription.id,
+          teamItemsCount: teamItems.length,
+        });
+
+        // Set team context for the event (no team creation here)
+        const baseTeamItem = teamItems[0];
+        teamContext = {
+          isTeamSubscription: true,
+          teamSize: Math.max(...teamItems.map(item => item.teamSize || 0)),
+          productName: baseTeamItem.productName,
+          productTier: baseTeamItem.productMetadata?.tier || 'enterprise',
+        };
+
+        logger.info("Team context prepared for event", {
+          subscriptionId: subscription.id,
+          teamContext,
+        });
+      }
       console.log(subscription, 'subscription before event')
       // Send SubscriptionCreated event
       await eventBridgeClient.send(
@@ -112,6 +182,9 @@ export const subscriptionCreated =
                 }),
                 ...(subscription.trial_end && {
                   trialEnd: subscription.trial_end,
+                }),
+                ...(teamContext && {
+                  teamContext,
                 }),
               }),
             },
