@@ -5,7 +5,7 @@ import { subscriptionUpdated } from "../SubscriptionUpdated/SubscriptionUpdated"
 import { subscriptionDeleted } from "../SubscriptionDeleted/SubscriptionDeleted";
 import { subscriptionUpgraded } from "../SubscriptionUpgraded/SubscriptionUpgraded";
 import type { EventBridgeEvent } from "aws-lambda";
-import type { StripeEventBridgeDetail } from "./SubscriptionEventConductor.types";
+import type { StripeEventBridgeDetail, SubscriptionEventConductorDependencies } from "./SubscriptionEventConductor.types";
 import type Stripe from "stripe";
 
 vi.mock("../SubscriptionCreated/SubscriptionCreated");
@@ -41,8 +41,10 @@ const baseDeps = {
     },
     subscriptions: {
       retrieve: vi.fn(),
+      update: vi.fn(),
     },
     prices: { list: vi.fn(), retrieve: vi.fn() },
+    billing: { meterEvents: { create: vi.fn() } },
   },
   eventBridgeClient: {
     send: mockEventBridgeSend,
@@ -55,6 +57,8 @@ const baseDeps = {
     send: mockSchedulerSend,
   },
   logger: mockLogger,
+  dynamoDBClient: { send: vi.fn() } as unknown as SubscriptionEventConductorDependencies['dynamoDBClient'],
+  idempotencyTableName: "test-table",
 };
 
 const makeEvent = (
@@ -200,6 +204,8 @@ describe("subscriptionEventConductor", () => {
       eventBusName: baseDeps.eventBusName,
       schedulerClient: baseDeps.schedulerClient,
       stripe: baseDeps.stripe,
+      dynamoDBClient: baseDeps.dynamoDBClient,
+      idempotencyTableName: baseDeps.idempotencyTableName,
       logger: baseDeps.logger,
     });
 
@@ -232,6 +238,8 @@ describe("subscriptionEventConductor", () => {
       stripe: baseDeps.stripe,
       eventBridgeClient: baseDeps.eventBridgeClient,
       eventBusName: baseDeps.eventBusName,
+      dynamoDBClient: baseDeps.dynamoDBClient,
+      idempotencyTableName: baseDeps.idempotencyTableName,
       logger: baseDeps.logger,
     });
 

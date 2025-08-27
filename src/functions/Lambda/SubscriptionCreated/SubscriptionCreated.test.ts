@@ -3,6 +3,15 @@ import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import { subscriptionCreated } from "./SubscriptionCreated";
 import type { SubscriptionCreatedEvent, SubscriptionCreatedDependencies } from "./SubscriptionCreated.types";
 
+// Mock the idempotency functions
+vi.mock("../lib/idempotency", () => ({
+  ensureIdempotency: vi.fn(),
+  generateEventId: vi.fn(() => "test-event-id"),
+}));
+
+import { ensureIdempotency } from "../lib/idempotency";
+const mockEnsureIdempotency = vi.mocked(ensureIdempotency);
+
 // Create mocks using vi.fn() pattern that works in other tests
 const mockStripe = {
   customers: { retrieve: vi.fn() },
@@ -64,6 +73,7 @@ describe("subscriptionCreated", () => {
     // Default successful responses
     mockDynamoDB.send.mockResolvedValue({ Item: undefined }); // No existing item
     mockEventBridge.send.mockResolvedValue({});
+    mockEnsureIdempotency.mockResolvedValue({ isDuplicate: false });
   });
 
   it("should process standard subscription successfully", async () => {
@@ -144,9 +154,7 @@ describe("subscriptionCreated", () => {
 
   it("should handle idempotency correctly", async () => {
     // Arrange - already processed
-    mockDynamoDB.send.mockResolvedValueOnce({ 
-      Item: { id: "subscription-created-sub_123" } 
-    });
+    mockEnsureIdempotency.mockResolvedValueOnce({ isDuplicate: true });
 
     // Act
     const result = await subscriptionCreated(dependencies)(baseEvent);
@@ -160,8 +168,10 @@ describe("subscriptionCreated", () => {
       alreadyProcessed: true
     });
 
-    // Should not send event
+    // Should not send event or call Stripe APIs
     expect(mockEventBridge.send).not.toHaveBeenCalled();
+    expect(mockStripe.products.retrieve).not.toHaveBeenCalled();
+    expect(mockStripe.prices.retrieve).not.toHaveBeenCalled();
   });
 
   it("should handle product retrieval failure", async () => {

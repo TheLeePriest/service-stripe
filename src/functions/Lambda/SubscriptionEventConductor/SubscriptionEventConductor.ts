@@ -128,7 +128,6 @@ export const subscriptionEventConductor =
 
           await subscriptionCreated({
             stripe,
-            uuidv4,
             eventBridgeClient,
             eventBusName,
             dynamoDBClient,
