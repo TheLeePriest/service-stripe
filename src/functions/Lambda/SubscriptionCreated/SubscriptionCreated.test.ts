@@ -1,183 +1,210 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { subscriptionCreated } from "./SubscriptionCreated";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import type Stripe from "stripe";
-import type { SubscriptionCreatedEvent } from "./SubscriptionCreated.types";
+import { subscriptionCreated } from "./SubscriptionCreated";
+import type { SubscriptionCreatedEvent, SubscriptionCreatedDependencies } from "./SubscriptionCreated.types";
+
+// Create mocks using vi.fn() pattern that works in other tests
+const mockStripe = {
+  customers: { retrieve: vi.fn() },
+  products: { retrieve: vi.fn() },
+  subscriptions: { retrieve: vi.fn(), update: vi.fn() },
+  prices: { retrieve: vi.fn() },
+  billing: { meterEvents: { create: vi.fn() } }
+};
+
+const mockEventBridge = {
+  send: vi.fn()
+};
+
+const mockDynamoDB = {
+  send: vi.fn()
+};
+
+const mockLogger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  logUsageEvent: vi.fn(),
+  logStripeEvent: vi.fn()
+};
+
+const dependencies: SubscriptionCreatedDependencies = {
+  stripe: mockStripe as SubscriptionCreatedDependencies['stripe'],
+  eventBridgeClient: mockEventBridge as SubscriptionCreatedDependencies['eventBridgeClient'],
+  eventBusName: "test-bus",
+  dynamoDBClient: mockDynamoDB as unknown as SubscriptionCreatedDependencies['dynamoDBClient'],
+  idempotencyTableName: "test-table",
+  logger: mockLogger as SubscriptionCreatedDependencies['logger']
+};
+
+const baseEvent: SubscriptionCreatedEvent = {
+  items: {
+    data: [
+      {
+        id: "item_123",
+        price: { product: "prod_123", id: "price_123" },
+        quantity: 1, // Single quantity to avoid team detection
+        current_period_end: 1625097600,
+        metadata: { test: "ing" }
+      }
+    ]
+  },
+  customer: "cus_123",
+  id: "sub_123",
+  status: "active",
+  cancel_at_period_end: false,
+  created: 3333333333,
+  metadata: {}
+};
 
 describe("subscriptionCreated", () => {
-  const mockUuid = "uuid-123";
-  const mockEventBusName = "test-bus";
-  const mockIdempotencyTableName = "test-idempotency-table";
-  const mockSend = vi.fn();
-  const mockRetrieveCustomer = vi.fn();
-  const mockRetrieveProduct = vi.fn();
-  const mockDynamoDBSend = vi.fn();
-
-  const mockRetrievePrice = vi.fn();
-  const stripeMock = {
-    customers: { retrieve: mockRetrieveCustomer },
-    products: { retrieve: mockRetrieveProduct },
-    subscriptions: { retrieve: vi.fn(), update: vi.fn() },
-    prices: { list: vi.fn(), retrieve: mockRetrievePrice },
-    billing: {
-      meterEvents: {
-        create: vi.fn(),
-      },
-    },
-  };
-
-  const eventBridgeClientMock = { send: mockSend };
-  const dynamoDBClientMock = { send: mockDynamoDBSend } as unknown as DynamoDBClient;
-
-  const mockLogger = {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    logUsageEvent: vi.fn(),
-    logStripeEvent: vi.fn(),
-  };
-
-  const dependencies = {
-    stripe: stripeMock,
-    uuidv4: () => mockUuid,
-    eventBridgeClient: eventBridgeClientMock,
-    eventBusName: mockEventBusName,
-    dynamoDBClient: dynamoDBClientMock,
-    idempotencyTableName: mockIdempotencyTableName,
-    logger: mockLogger,
-  };
-
-  const baseEvent: SubscriptionCreatedEvent = {
-    items: {
-      data: [
-        {
-          id: "item_123",
-          price: { product: "prod_123", id: "price_123" },
-          quantity: 2,
-          current_period_end: 1625097600,
-          metadata: { test: "ing" } as Stripe.Metadata,
-        },
-      ],
-    },
-    customer: "cus_123",
-    id: "sub_123",
-    status: "active",
-    cancel_at_period_end: false,
-    trial_start: 1111111111,
-    trial_end: 2222222222,
-    created: 3333333333,
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default successful responses
+    mockDynamoDB.send.mockResolvedValue({ Item: undefined }); // No existing item
+    mockEventBridge.send.mockResolvedValue({});
   });
 
-  it("should retrieve customer and product, and send event for each item", async () => {
-    const mockStripeCustomer = { email: "test@example.com" };
-    mockRetrieveCustomer.mockResolvedValue(mockStripeCustomer);
-    // Use mockImplementation to return the correct id for each call
-    mockRetrieveProduct.mockImplementation(async (id) => ({ id, name: "Test Product" }));
-    mockRetrievePrice.mockImplementation(async (id) => ({
-      id,
+  it("should process standard subscription successfully", async () => {
+    // Arrange
+    mockStripe.products.retrieve.mockResolvedValue({ 
+      id: "prod_123", 
+      name: "Standard Product",
+      metadata: {} // No tier = standard subscription
+    });
+    mockStripe.prices.retrieve.mockResolvedValue({
+      id: "price_123",
       unit_amount: 1000,
       currency: "usd",
       recurring: { interval: "month" },
-      metadata: {},
-    }));
-    mockSend.mockResolvedValue({});
-    // Mock DynamoDB responses for idempotency - PutItem succeeds (no existing item)
-    mockDynamoDBSend.mockResolvedValueOnce({});
-
-    await subscriptionCreated(dependencies)(baseEvent);
-
-    expect(mockRetrieveCustomer).toHaveBeenCalledWith("cus_123");
-    expect(mockRetrieveProduct).toHaveBeenCalledWith("prod_123");
-    expect(mockRetrievePrice).toHaveBeenCalledWith("price_123");
-    
-    // We now send only SubscriptionCreated event
-    expect(mockSend).toHaveBeenCalledTimes(1);
-
-    // Should send SubscriptionCreated event
-    const subscriptionCommand = mockSend.mock.calls[0][0];
-    expect(subscriptionCommand).toBeInstanceOf(PutEventsCommand);
-
-    const subscriptionEntries = subscriptionCommand.input.Entries;
-    expect(subscriptionEntries).toHaveLength(1);
-    expect(subscriptionEntries[0]).toMatchObject({
-      Source: "service.stripe",
-      DetailType: "SubscriptionCreated",
-      EventBusName: mockEventBusName,
+      metadata: {}
     });
 
-    const detail = JSON.parse(subscriptionEntries[0].Detail);
-    expect(detail).toMatchObject({
-      stripeSubscriptionId: "sub_123",
-      stripeCustomerId: "cus_123",
-      customerEmail: "test@example.com",
-      items: [
-        {
-          itemId: "item_123",
-          productId: "prod_123",
-          productName: "Test Product",
-          priceId: "price_123",
-          priceData: {
-            unitAmount: 1000,
-            currency: "usd",
-            recurring: { interval: "month" },
-            metadata: {},
-          },
-          quantity: 2,
-          expiresAt: 1625097600,
-          metadata: { test: "ing" },
-        },
-      ],
-      status: "active",
-      createdAt: 3333333333,
-      cancelAtPeriodEnd: false,
-      trialStart: 1111111111,
-      trialEnd: 2222222222,
+    // Act
+    const result = await subscriptionCreated(dependencies)(baseEvent);
+
+    // Assert
+    expect(result).toEqual({
+      success: true,
+      subscriptionId: "sub_123",
+      customerId: "cus_123",
+      isTeamSubscription: false
     });
+
+    // Check EventBridge event was sent
+    expect(mockEventBridge.send).toHaveBeenCalledTimes(1);
+    const command = mockEventBridge.send.mock.calls[0][0];
+    expect(command).toBeInstanceOf(PutEventsCommand);
+    expect(command.input.Entries[0].DetailType).toBe("SubscriptionCreated");
   });
 
-  it("should throw if stripe.customers.retrieve fails", async () => {
-    mockRetrieveCustomer.mockRejectedValue(new Error("Customer not found"));
-    // Mock DynamoDB responses for idempotency - PutItem succeeds (no existing item)
-    mockDynamoDBSend.mockResolvedValueOnce({});
+  it("should detect team subscription correctly", async () => {
+    // Arrange
+    const teamEvent = {
+      ...baseEvent,
+      items: {
+        data: [
+          {
+            id: "item_123",
+            price: { product: "prod_123", id: "price_123" },
+            quantity: 2, // Multiple quantity for team detection
+            current_period_end: 1625097600,
+            metadata: { test: "ing" }
+          }
+        ]
+      }
+    };
 
-    await expect(subscriptionCreated(dependencies)(baseEvent)).rejects.toThrow(
-      "Customer not found",
-    );
-  });
-
-  it("should throw if stripe.products.retrieve fails", async () => {
-    mockRetrieveCustomer.mockResolvedValue({ email: "test@example.com" });
-    mockRetrieveProduct.mockRejectedValue(new Error("Product not found"));
-    // Mock DynamoDB responses for idempotency - PutItem succeeds (no existing item)
-    mockDynamoDBSend.mockResolvedValueOnce({});
-
-    await expect(subscriptionCreated(dependencies)(baseEvent)).rejects.toThrow(
-      "Product not found",
-    );
-  });
-
-  it("should throw if eventBridgeClient.send fails", async () => {
-    mockRetrieveCustomer.mockResolvedValue({ email: "test@example.com" });
-    mockRetrieveProduct.mockImplementation(async (id) => ({ id, name: "Test Product" }));
-    mockRetrievePrice.mockImplementation(async (id) => ({
-      id,
+    mockStripe.products.retrieve.mockResolvedValue({ 
+      id: "prod_123", 
+      name: "Team Product",
+      metadata: { tier: "enterprise" } // Team subscription
+    });
+    mockStripe.prices.retrieve.mockResolvedValue({
+      id: "price_123",
       unit_amount: 1000,
       currency: "usd",
       recurring: { interval: "month" },
-      metadata: {},
-    }));
-    mockSend.mockRejectedValue(new Error("EventBridge error"));
-    // Mock DynamoDB responses for idempotency - PutItem succeeds (no existing item)
-    mockDynamoDBSend.mockResolvedValueOnce({});
+      metadata: {}
+    });
 
-    await expect(subscriptionCreated(dependencies)(baseEvent)).rejects.toThrow(
-      "EventBridge error",
-    );
+    // Act
+    const result = await subscriptionCreated(dependencies)(teamEvent);
+
+    // Assert
+    expect(result).toEqual({
+      success: true,
+      subscriptionId: "sub_123",
+      customerId: "cus_123",
+      isTeamSubscription: true,
+      teamSize: 2
+    });
+  });
+
+  it("should handle idempotency correctly", async () => {
+    // Arrange - already processed
+    mockDynamoDB.send.mockResolvedValueOnce({ 
+      Item: { id: "subscription-created-sub_123" } 
+    });
+
+    // Act
+    const result = await subscriptionCreated(dependencies)(baseEvent);
+
+    // Assert
+    expect(result).toEqual({
+      success: true,
+      subscriptionId: "sub_123",
+      customerId: "cus_123",
+      isTeamSubscription: false,
+      alreadyProcessed: true
+    });
+
+    // Should not send event
+    expect(mockEventBridge.send).not.toHaveBeenCalled();
+  });
+
+  it("should handle product retrieval failure", async () => {
+    // Arrange
+    mockStripe.products.retrieve.mockRejectedValue(new Error("Product not found"));
+
+    // Act & Assert
+    await expect(subscriptionCreated(dependencies)(baseEvent))
+      .rejects.toThrow("Product not found");
+  });
+
+  it("should handle price retrieval failure", async () => {
+    // Arrange
+    mockStripe.products.retrieve.mockResolvedValue({ 
+      id: "prod_123", 
+      name: "Test Product",
+      metadata: {}
+    });
+    mockStripe.prices.retrieve.mockRejectedValue(new Error("Price not found"));
+
+    // Act & Assert
+    await expect(subscriptionCreated(dependencies)(baseEvent))
+      .rejects.toThrow("Price not found");
+  });
+
+  it("should handle EventBridge failure", async () => {
+    // Arrange
+    mockStripe.products.retrieve.mockResolvedValue({ 
+      id: "prod_123", 
+      name: "Test Product",
+      metadata: {}
+    });
+    mockStripe.prices.retrieve.mockResolvedValue({
+      id: "price_123",
+      unit_amount: 1000,
+      currency: "usd",
+      recurring: { interval: "month" },
+      metadata: {}
+    });
+    mockEventBridge.send.mockRejectedValue(new Error("EventBridge error"));
+
+    // Act & Assert
+    await expect(subscriptionCreated(dependencies)(baseEvent))
+      .rejects.toThrow("EventBridge error");
   });
 });

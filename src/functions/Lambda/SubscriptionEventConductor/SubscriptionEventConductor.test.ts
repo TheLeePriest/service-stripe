@@ -3,6 +3,7 @@ import { subscriptionEventConductor } from "./SubscriptionEventConductor";
 import { subscriptionCreated } from "../SubscriptionCreated/SubscriptionCreated";
 import { subscriptionUpdated } from "../SubscriptionUpdated/SubscriptionUpdated";
 import { subscriptionDeleted } from "../SubscriptionDeleted/SubscriptionDeleted";
+import { subscriptionUpgraded } from "../SubscriptionUpgraded/SubscriptionUpgraded";
 import type { EventBridgeEvent } from "aws-lambda";
 import type { StripeEventBridgeDetail } from "./SubscriptionEventConductor.types";
 import type Stripe from "stripe";
@@ -13,6 +14,8 @@ vi.mock("../SubscriptionUpdated/SubscriptionUpdated");
 const mockSubscriptionUpdated = vi.mocked(subscriptionUpdated);
 vi.mock("../SubscriptionDeleted/SubscriptionDeleted");
 const mockSubscriptionDeleted = vi.mocked(subscriptionDeleted);
+vi.mock("../SubscriptionUpgraded/SubscriptionUpgraded");
+const mockSubscriptionUpgraded = vi.mocked(subscriptionUpgraded);
 
 const mockCustomerRetrieve = vi.fn();
 const mockProductRetrieve = vi.fn();
@@ -61,6 +64,7 @@ const makeEvent = (
   const testSub = {
     items: { data: [] },
     created: Math.floor(Date.now() / 1000),
+    metadata: {},
     ...subscriptionOverride,
   };
   return {
@@ -93,7 +97,7 @@ describe("subscriptionEventConductor", () => {
     vi.clearAllMocks();
   });
 
-  it("calls subscriptionCreated for customer.subscription.created", async () => {
+  it("calls subscriptionCreated for regular customer.subscription.created", async () => {
     const mockHandler = vi.fn();
     mockSubscriptionCreated.mockReturnValueOnce(mockHandler);
 
@@ -104,14 +108,52 @@ describe("subscriptionEventConductor", () => {
       customer: "cus_123",
       status: "active",
       cancel_at_period_end: false,
-      created: Math.floor(Date.now() / 1000),
+      metadata: {}, // No upgrade metadata
     });
 
     await handler(event);
 
     expect(mockSubscriptionCreated).toHaveBeenCalledWith({
       stripe: baseDeps.stripe,
-      uuidv4: baseDeps.uuidv4,
+      eventBridgeClient: baseDeps.eventBridgeClient,
+      eventBusName: baseDeps.eventBusName,
+      dynamoDBClient: baseDeps.dynamoDBClient,
+      idempotencyTableName: baseDeps.idempotencyTableName,
+      logger: baseDeps.logger,
+    });
+    expect(mockHandler).toHaveBeenCalledWith({
+      cancel_at_period_end: false,
+      created: expect.any(Number),
+      customer: "cus_123",
+      id: "sub_123",
+      items: { data: [] },
+      status: "active",
+      metadata: {},
+    });
+  });
+
+  it("calls subscriptionUpgraded for upgrade customer.subscription.created", async () => {
+    const mockHandler = vi.fn();
+    mockSubscriptionUpgraded.mockReturnValueOnce(mockHandler);
+
+    const handler = subscriptionEventConductor(baseDeps);
+    const event = makeEvent("customer.subscription.created", {
+      id: "sub_123",
+      items: { data: [] },
+      customer: "cus_123",
+      status: "active",
+      cancel_at_period_end: false,
+      metadata: { 
+        is_upgrade: "true",
+        upgrade_type: "trial_to_paid",
+        original_trial_subscription_id: "sub_trial_123"
+      },
+    });
+
+    await handler(event);
+
+    expect(mockSubscriptionUpgraded).toHaveBeenCalledWith({
+      stripe: baseDeps.stripe,
       eventBridgeClient: baseDeps.eventBridgeClient,
       eventBusName: baseDeps.eventBusName,
       logger: baseDeps.logger,
@@ -123,6 +165,11 @@ describe("subscriptionEventConductor", () => {
       id: "sub_123",
       items: { data: [] },
       status: "active",
+      metadata: { 
+        is_upgrade: "true",
+        upgrade_type: "trial_to_paid",
+        original_trial_subscription_id: "sub_trial_123"
+      },
     });
   });
 
