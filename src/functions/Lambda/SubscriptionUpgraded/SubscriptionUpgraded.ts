@@ -1,46 +1,43 @@
-import type Stripe from "stripe";
 import type {
-  SubscriptionCreatedEvent,
-  SubscriptionCreatedDependencies,
-  SubscriptionCreatedResult,
-} from "./SubscriptionCreated.types";
+  SubscriptionUpgradedEvent,
+  SubscriptionUpgradedDependencies,
+  SubscriptionUpgradedResult,
+} from "./SubscriptionUpgraded.types";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import type { Logger } from "../types/utils.types";
-import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 
-export const subscriptionCreated =
-  (dependencies: SubscriptionCreatedDependencies) =>
-  async (subscription: SubscriptionCreatedEvent): Promise<SubscriptionCreatedResult> => {
-    const { stripe, eventBridgeClient, eventBusName, dynamoDBClient, idempotencyTableName, logger } = dependencies;
+export const subscriptionUpgraded =
+  (dependencies: SubscriptionUpgradedDependencies) =>
+  async (subscription: SubscriptionUpgradedEvent): Promise<SubscriptionUpgradedResult> => {
+    const { stripe, eventBridgeClient, eventBusName, logger } = dependencies;
     
-    logger.logStripeEvent("customer.subscription.created", subscription as unknown as Record<string, unknown>);
-    logger.info("Processing subscription created", { 
+    logger.logStripeEvent("customer.subscription.upgraded", subscription as unknown as Record<string, unknown>);
+    logger.info("Processing subscription upgrade", { 
       subscriptionId: subscription.id,
       customerId: subscription.customer,
+      upgradeType: subscription.metadata?.upgrade_type,
+      originalTrialSubscriptionId: subscription.metadata?.original_trial_subscription_id,
     });
 
     try {
-      // Generate idempotency key
-      const eventId = generateEventId("subscription-created", subscription.id, subscription.created);
-      
-      // Check idempotency
-      const idempotencyResult = await ensureIdempotency(
-        { dynamoDBClient, tableName: idempotencyTableName, logger },
-        eventId,
-        { subscriptionId: subscription.id, customerId: subscription.customer }
-      );
+      // Extract upgrade information from metadata
+      const upgradeType = subscription.metadata?.upgrade_type;
+      const originalTrialSubscriptionId = subscription.metadata?.original_trial_subscription_id;
+      const upgradeReason = subscription.metadata?.upgrade_reason;
+      const productTier = subscription.metadata?.product_tier;
+      const pricingModel = subscription.metadata?.pricing_model;
 
-      if (idempotencyResult.isDuplicate) {
-        logger.info("Subscription already processed, skipping", { 
+      // Validate upgrade metadata
+      if (!upgradeType || !originalTrialSubscriptionId) {
+        logger.warn("Missing upgrade metadata, treating as regular subscription", {
           subscriptionId: subscription.id,
-          eventId 
+          metadata: subscription.metadata,
         });
         return {
-          success: true,
+          success: false,
           subscriptionId: subscription.id,
           customerId: subscription.customer,
-          isTeamSubscription: false,
-          alreadyProcessed: true,
+          upgradeType: "unknown",
         };
       }
 
@@ -77,19 +74,19 @@ export const subscriptionCreated =
         })
       );
 
-      // Determine if this is a team subscription
+      // Determine if this is a team upgrade
       const teamItems = items.filter(item => item.isTeamSubscription);
-      const isTeamSubscription = teamItems.length > 0;
+      const isTeamUpgrade = teamItems.length > 0;
 
-      logger.info("Processed subscription items", {
+      logger.info("Processed upgrade subscription items", {
         subscriptionId: subscription.id,
         totalItems: items.length,
         teamItems: teamItems.length,
         individualItems: items.filter(item => !item.isTeamSubscription).length,
-        isTeamSubscription,
+        isTeamUpgrade,
       });
 
-      // Prepare team context if this is a team subscription
+      // Prepare team context if this is a team upgrade
       let teamContext: {
         isTeamSubscription: boolean;
         teamSize: number;
@@ -97,7 +94,7 @@ export const subscriptionCreated =
         productTier: string;
       } | undefined;
 
-      if (isTeamSubscription) {
+      if (isTeamUpgrade) {
         const baseTeamItem = teamItems[0];
         teamContext = {
           isTeamSubscription: true,
@@ -106,19 +103,19 @@ export const subscriptionCreated =
           productTier: baseTeamItem.productMetadata?.tier || 'enterprise',
         };
 
-        logger.info("Team subscription context prepared", {
+        logger.info("Team upgrade context prepared", {
           subscriptionId: subscription.id,
           teamContext,
         });
       }
 
-      // Emit SubscriptionCreated event for downstream services
+      // Emit SubscriptionUpgraded event for downstream services
       await eventBridgeClient.send(
         new PutEventsCommand({
           Entries: [
             {
               Source: "service.stripe",
-              DetailType: "SubscriptionCreated",
+              DetailType: "SubscriptionUpgraded",
               EventBusName: eventBusName,
               Detail: JSON.stringify({
                 stripeSubscriptionId: subscription.id,
@@ -129,6 +126,12 @@ export const subscriptionCreated =
                 status: subscription.status,
                 createdAt: subscription.created,
                 cancelAtPeriodEnd: subscription.cancel_at_period_end,
+                // Upgrade-specific information
+                upgradeType,
+                originalTrialSubscriptionId,
+                upgradeReason,
+                productTier,
+                pricingModel,
                 // Team context if applicable
                 ...(teamContext && { teamContext }),
                 // Metadata for tracking
@@ -143,22 +146,25 @@ export const subscriptionCreated =
         }),
       );
 
-      logger.info("SubscriptionCreated event emitted successfully", {
+      logger.info("SubscriptionUpgraded event emitted successfully", {
         subscriptionId: subscription.id,
         customerId: subscription.customer,
-        eventType: "SubscriptionCreated",
+        upgradeType,
+        originalTrialSubscriptionId,
+        eventType: "SubscriptionUpgraded",
       });
 
       return {
         success: true,
         subscriptionId: subscription.id,
         customerId: subscription.customer,
-        isTeamSubscription: !!teamContext,
-        teamSize: teamContext?.teamSize,
+        upgradeType,
+        originalTrialSubscriptionId,
+        upgradeReason,
       };
 
     } catch (error) {
-      logger.error("Error processing subscription created", {
+      logger.error("Error processing subscription upgrade", {
         subscriptionId: subscription.id,
         customerId: subscription.customer,
         error: error instanceof Error ? error.message : String(error),

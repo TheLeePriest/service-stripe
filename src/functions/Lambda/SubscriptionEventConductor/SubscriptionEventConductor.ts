@@ -10,6 +10,8 @@ import type { SubscriptionCreatedEvent } from "../SubscriptionCreated/Subscripti
 import type { SubscriptionUpdatedEvent } from "../SubscriptionUpdated/SubscriptionUpdated.types";
 import type { SubscriptionDeletedEvent } from "../SubscriptionDeleted/SubscriptionDeleted.types";
 import type { Logger } from "../types/utils.types";
+import { subscriptionUpgraded } from "../SubscriptionUpgraded/SubscriptionUpgraded";
+import type { SubscriptionUpgradedEvent } from "../SubscriptionUpgraded/SubscriptionUpgraded.types";
 
 export const subscriptionEventConductor =
   ({
@@ -36,49 +38,104 @@ export const subscriptionEventConductor =
 
     switch (stripeEvent.type) {
       case "customer.subscription.created": {
-        const createdEvent: SubscriptionCreatedEvent = {
-          items: {
-            data: subscription.items.data.map((item) => {
-              const productId =
-                typeof item.price === "string"
-                  ? item.price
-                  : typeof item.price.product === "string"
-                    ? item.price.product
-                    : item.price.product.id;
-              const quantityValue = item.quantity ?? 1;
-              return {
-                id: item.id,
-                price: { product: productId, id: item.price.id },
-                quantity: quantityValue,
-                current_period_end: item.current_period_end,
-                metadata: item.metadata,
-              };
+        // Check if this is an upgrade subscription
+        const isUpgrade = subscription.metadata?.is_upgrade === 'true' || 
+                         subscription.metadata?.upgrade_type === 'trial_to_paid';
+        
+        if (isUpgrade) {
+          logger.info("Upgrade subscription detected, routing to SubscriptionUpgraded", {
+            subscriptionId: subscription.id,
+            upgradeType: subscription.metadata?.upgrade_type,
+          });
+          
+          const upgradedEvent: SubscriptionUpgradedEvent = {
+            items: {
+              data: subscription.items.data.map((item) => {
+                const productId =
+                  typeof item.price === "string"
+                    ? item.price
+                    : typeof item.price.product === "string"
+                      ? item.price.product
+                      : item.price.product.id;
+                const quantityValue = item.quantity ?? 1;
+                return {
+                  id: item.id,
+                  price: { product: productId, id: item.price.id },
+                  quantity: quantityValue,
+                  current_period_end: item.current_period_end,
+                  metadata: item.metadata,
+                };
+              }),
+            },
+            customer: subscription.customer as string,
+            id: subscription.id,
+            status: subscription.status,
+            cancel_at_period_end: subscription.cancel_at_period_end,
+            ...(subscription.trial_start && {
+              trial_start: subscription.trial_start,
             }),
-          },
-          customer: subscription.customer as string,
-          id: subscription.id,
-          status: subscription.status,
-          cancel_at_period_end: subscription.cancel_at_period_end,
-          ...(subscription.trial_start && {
-            trial_start: subscription.trial_start,
-          }),
-          ...(subscription.trial_end && {
-            trial_end: subscription.trial_end,
-          }),
-          created: subscription.created,
-        };
+            ...(subscription.trial_end && {
+              trial_end: subscription.trial_end,
+            }),
+            created: subscription.created,
+            metadata: subscription.metadata || {},
+          };
 
-        logger.info("Sending subscription created event", { createdEvent });  
+          logger.info("Sending subscription upgraded event", { upgradedEvent });
 
-        await subscriptionCreated({
-          stripe,
-          uuidv4,
-          eventBridgeClient,
-          eventBusName,
-          dynamoDBClient,
-          idempotencyTableName,
-          logger,
-        })(createdEvent);
+          await subscriptionUpgraded({
+            stripe,
+            eventBridgeClient,
+            eventBusName,
+            logger,
+          })(upgradedEvent);
+        } else {
+          // Regular subscription creation
+          const createdEvent: SubscriptionCreatedEvent = {
+            items: {
+              data: subscription.items.data.map((item) => {
+                const productId =
+                  typeof item.price === "string"
+                    ? item.price
+                    : typeof item.price.product === "string"
+                      ? item.price.product
+                      : item.price.product.id;
+                const quantityValue = item.quantity ?? 1;
+                return {
+                  id: item.id,
+                  price: { product: productId, id: item.price.id },
+                  quantity: quantityValue,
+                  current_period_end: item.current_period_end,
+                  metadata: item.metadata,
+                };
+              }),
+            },
+            customer: subscription.customer as string,
+            id: subscription.id,
+            status: subscription.status,
+            cancel_at_period_end: subscription.cancel_at_period_end,
+            ...(subscription.trial_start && {
+              trial_start: subscription.trial_start,
+            }),
+            ...(subscription.trial_end && {
+              trial_end: subscription.trial_end,
+            }),
+            created: subscription.created,
+            metadata: subscription.metadata || {},
+          };
+
+          logger.info("Sending subscription created event", { createdEvent });  
+
+          await subscriptionCreated({
+            stripe,
+            uuidv4,
+            eventBridgeClient,
+            eventBusName,
+            dynamoDBClient,
+            idempotencyTableName,
+            logger,
+          })(createdEvent);
+        }
         break;
       }
 

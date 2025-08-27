@@ -7,18 +7,16 @@ import type Stripe from "stripe";
 import type { StripeClient } from "../types/stripe.types";
 import type { Logger } from "../types/utils.types";
 
-export type SubscriptionCreatedDependencies = {
+export type SubscriptionUpgradedDependencies = {
   stripe: StripeClient;
   eventBridgeClient: {
     send: (command: PutEventsCommand) => Promise<PutEventsCommandOutput>;
   };
-  dynamoDBClient: DynamoDBClient;
   eventBusName: string;
-  idempotencyTableName: string;
   logger: Logger;
 };
 
-export type SubscriptionCreatedEvent = {
+export type SubscriptionUpgradedEvent = {
   items: {
     data: Array<{
       id: string;
@@ -38,12 +36,11 @@ export type SubscriptionCreatedEvent = {
   metadata?: Stripe.Metadata;
 };
 
-// Result type for the subscription created function
-export type SubscriptionCreatedResult = {
+export type SubscriptionUpgradedResult = {
   success: boolean;
   subscriptionId: string;
   customerId: string;
-  isTeamSubscription: boolean;
-  teamSize?: number;
-  alreadyProcessed?: boolean;
+  upgradeType?: string;
+  originalTrialSubscriptionId?: string;
+  upgradeReason?: string;
 };

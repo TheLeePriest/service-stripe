@@ -31,9 +31,8 @@ const logger = createStripeLogger(
 export const subscriptionCreatedHandler = subscriptionCreated({
 	stripe,
 	eventBridgeClient,
-	dynamoDBClient,
-	uuidv4,
 	eventBusName,
+	dynamoDBClient,
 	idempotencyTableName,
 	logger,
 });
