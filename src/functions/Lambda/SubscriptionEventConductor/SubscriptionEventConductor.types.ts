@@ -6,6 +6,7 @@ import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type { SchedulerClient } from "../types/aws.types";
 import type { Stripe } from "stripe";
 import type { StripeClient } from "../types/stripe.types";
+import type { Logger } from "../types/utils.types";
 
 export type SubscriptionEventConductorDependencies = {
   stripe: StripeClient;
@@ -18,6 +19,7 @@ export type SubscriptionEventConductorDependencies = {
   schedulerClient: SchedulerClient;
   dynamoDBClient: DynamoDBClient;
   idempotencyTableName: string;
+   logger: Logger;
 };
 
 export type StripeEventBridgeDetail = {

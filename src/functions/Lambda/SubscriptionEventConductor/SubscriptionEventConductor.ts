@@ -4,13 +4,12 @@ import { subscriptionUpdated } from "../SubscriptionUpdated/SubscriptionUpdated"
 import { subscriptionDeleted } from "../SubscriptionDeleted/SubscriptionDeleted";
 import type {
   SubscriptionEventConductorDependencies,
-  StripeEventBridgeDetail,
 } from "./SubscriptionEventConductor.types";
 import type { SubscriptionCreatedEvent } from "../SubscriptionCreated/SubscriptionCreated.types";
 import type { SubscriptionUpdatedEvent } from "../SubscriptionUpdated/SubscriptionUpdated.types";
 import type { SubscriptionDeletedEvent } from "../SubscriptionDeleted/SubscriptionDeleted.types";
-import type { Logger } from "../types/utils.types";
 import { subscriptionUpgraded } from "../SubscriptionUpgraded/SubscriptionUpgraded";
+import type { Stripe } from "stripe";
 
 export const subscriptionEventConductor =
   ({
@@ -23,12 +22,14 @@ export const subscriptionEventConductor =
     logger,
     dynamoDBClient,
     idempotencyTableName,
-  }: SubscriptionEventConductorDependencies & { logger: Logger }) =>
-  async (event: EventBridgeEvent<string, StripeEventBridgeDetail>) => {
-    console.log(event,'event')
+  }: SubscriptionEventConductorDependencies) =>
+  async (
+    event: EventBridgeEvent<string, Stripe.CustomerSubscriptionCreatedEvent | Stripe.CustomerSubscriptionUpdatedEvent | Stripe.CustomerSubscriptionDeletedEvent>,
+  ) => {
+    console.log(event, "event");
     const stripeEvent = event.detail;
     const subscription = stripeEvent.data.object;
-    
+
     logger.info("Processing subscription event", {
       eventType: stripeEvent.type,
       subscriptionId: subscription.id,
@@ -39,7 +40,7 @@ export const subscriptionEventConductor =
       case "customer.subscription.created": {
         // Check if this is an upgrade based on metadata
         const isUpgrade = subscription.metadata?.is_upgrade === "true";
-        
+
         if (isUpgrade) {
           // Route to upgrade handler
           const upgradeEvent = {
@@ -120,7 +121,7 @@ export const subscriptionEventConductor =
           metadata: subscription.metadata || {},
         };
 
-        logger.info("Sending subscription created event", { createdEvent });  
+        logger.info("Sending subscription created event", { createdEvent });
 
         await subscriptionCreated({
           stripe,
@@ -194,9 +195,9 @@ export const subscriptionEventConductor =
           ended_at: subscription.ended_at ?? undefined,
           canceled_at: subscription.canceled_at ?? undefined,
         };
-        await subscriptionDeleted({ 
-          stripe, 
-          eventBridgeClient, 
+        await subscriptionDeleted({
+          stripe,
+          eventBridgeClient,
           eventBusName,
           dynamoDBClient,
           idempotencyTableName,
@@ -206,6 +207,6 @@ export const subscriptionEventConductor =
       }
 
       default:
-        logger.warn("Unhandled event type", { eventType: stripeEvent.type });
+        logger.warn("Unhandled event type", { eventType: event.detail.type });
     }
   };

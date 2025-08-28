@@ -12,7 +12,7 @@ export const sessionEventConductor =
     idempotencyTableName,
     logger,
   }: SessionEventConductorDependencies) =>
-  async (event: EventBridgeEvent<string, unknown>) => {
+  async (event: EventBridgeEvent<string, Stripe.CheckoutSessionCompletedEvent>) => {
     console.log("event", JSON.stringify(event));
     logger.info("SessionEventConductor invoked", {
       eventId: event.id,
@@ -28,28 +28,22 @@ export const sessionEventConductor =
     });
 
     try {
-      // Extract the Stripe event from the EventBridge event
-      const stripeEvent = event.detail as Record<string, unknown>;
-      const session = (stripeEvent.data &&
-        typeof stripeEvent.data === "object" &&
-        (stripeEvent.data as Record<string, unknown>).object) as
-        | Record<string, unknown>
-        | undefined;
-      const sessionId = session?.id as string | undefined;
-      // Prefer customer_email, fallback to customer (which is a Stripe customer ID)
-      const userId =
-        (session?.customer_email as string | undefined) ||
-        (session?.customer as string | undefined);
-      const stripeCustomerId = session?.customer as string | undefined;
-      // Try to get resourcesAnalyzed from metadata, fallback to 1 if not present
+      const stripeEvent = event.detail
+      const session = stripeEvent.data;
+      const sessionId = session.object.id;
+      const customerEmail = session.object.customer_details?.email;
+      const stripeCustomerId = session.object.customer;
+
       let resourcesAnalyzed: number | undefined = undefined;
-      const metadata = session?.metadata as Record<string, unknown> | undefined;
+      const metadata = session?.object.metadata;
+      
       if (metadata && typeof metadata.resourcesAnalyzed !== "undefined") {
         const val = metadata.resourcesAnalyzed;
         resourcesAnalyzed =
           typeof val === "number" ? val : Number.parseInt(val as string, 10);
         if (Number.isNaN(resourcesAnalyzed)) resourcesAnalyzed = undefined;
       }
+
       // If not present, fallback to 1 (single license/session)
       if (typeof resourcesAnalyzed === "undefined") {
         resourcesAnalyzed = 1;
@@ -57,12 +51,11 @@ export const sessionEventConductor =
 
       logger.info("Extracted session event detail", {
         sessionId,
-        userId,
         stripeCustomerId,
         resourcesAnalyzed,
         hasAllRequiredFields: !!(
           sessionId &&
-          userId &&
+          customerEmail &&
           stripeCustomerId &&
           resourcesAnalyzed
         ),
@@ -74,36 +67,18 @@ export const sessionEventConductor =
 
       if (
         !sessionId ||
-        !userId ||
+        !customerEmail ||
         !stripeCustomerId ||
         typeof resourcesAnalyzed === "undefined"
       ) {
         logger.error("Missing required session event fields", {
           sessionId,
-          userId,
           stripeCustomerId,
           resourcesAnalyzed,
         });
         throw new Error("Session event missing required fields");
       }
 
-      // Create a mock Stripe session event structure for the sessionCompleted function
-      const mockStripeEvent: Stripe.CheckoutSessionCompletedEvent.Data = {
-        object: {
-          id: sessionId,
-          customer_details: {
-            email: userId, // Use userId as email if possible
-            name:
-              (session?.customer_details as { name?: string })?.name ||
-              (metadata?.name as string) ||
-              "User",
-          },
-          customer: stripeCustomerId,
-          metadata: metadata,
-        } as Stripe.Checkout.Session,
-      };
-
-      // Process the session completion
       await sessionCompleted({
         stripe,
         eventBridgeClient,
@@ -111,11 +86,10 @@ export const sessionEventConductor =
         dynamoDBClient,
         idempotencyTableName,
         logger,
-      })(mockStripeEvent);
+      })(stripeEvent.data);
 
       logger.info("Successfully processed session completion", {
         sessionId,
-        userId,
         stripeCustomerId,
         resourcesAnalyzed,
       });

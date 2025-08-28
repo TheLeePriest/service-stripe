@@ -92,7 +92,6 @@ export const sessionCompleted =
                   email: email,
                   name: customer.name,
                 },
-                // Additional fields for other services
                 userName: email,
                 name: customer.name,
                 signUpDate: now,
