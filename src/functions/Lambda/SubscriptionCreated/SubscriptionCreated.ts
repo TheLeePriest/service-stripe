@@ -5,7 +5,6 @@ import type {
   ProcessedSubscriptionItem,
 } from "./SubscriptionCreated.types";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import type { Logger } from "../types/utils.types";
 import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 
 export const subscriptionCreated =

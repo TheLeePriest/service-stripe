@@ -25,6 +25,7 @@ export const subscriptionEventConductor =
     idempotencyTableName,
   }: SubscriptionEventConductorDependencies & { logger: Logger }) =>
   async (event: EventBridgeEvent<string, StripeEventBridgeDetail>) => {
+    console.log(event,'event')
     const stripeEvent = event.detail;
     const subscription = stripeEvent.data.object;
     
@@ -106,8 +107,6 @@ export const subscriptionEventConductor =
             }),
           },
           customer: subscription.customer as string,
-          customerEmail,
-          customerName,
           id: subscription.id,
           status: subscription.status,
           cancel_at_period_end: subscription.cancel_at_period_end,
