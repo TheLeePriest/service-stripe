@@ -13,7 +13,7 @@ export const sessionEventConductor =
     logger,
   }: SessionEventConductorDependencies) =>
   async (event: EventBridgeEvent<string, unknown>) => {
-    console.log("event", event);
+    console.log("event", JSON.stringify(event));
     logger.info("SessionEventConductor invoked", {
       eventId: event.id,
       source: event.source,
