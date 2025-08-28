@@ -109,7 +109,11 @@ describe("subscriptionEventConductor", () => {
     const event = makeEvent("customer.subscription.created", {
       id: "sub_123",
       items: { data: [] },
-      customer: "cus_123",
+      customer: {
+        id: "cus_123",
+        email: "test@example.com",
+        name: "Test User"
+      },
       status: "active",
       cancel_at_period_end: false,
       metadata: {}, // No upgrade metadata
@@ -129,6 +133,8 @@ describe("subscriptionEventConductor", () => {
       cancel_at_period_end: false,
       created: expect.any(Number),
       customer: "cus_123",
+      customerEmail: "test@example.com",
+      customerName: "Test User",
       id: "sub_123",
       items: { data: [] },
       status: "active",
@@ -144,7 +150,11 @@ describe("subscriptionEventConductor", () => {
     const event = makeEvent("customer.subscription.created", {
       id: "sub_123",
       items: { data: [] },
-      customer: "cus_123",
+      customer: {
+        id: "cus_123",
+        email: "test@example.com",
+        name: "Test User"
+      },
       status: "active",
       cancel_at_period_end: false,
       metadata: { 
@@ -185,7 +195,11 @@ describe("subscriptionEventConductor", () => {
     const subscriptionOverride = {
       id: "sub_123",
       items: { data: [] },
-      customer: "cus_123",
+      customer: {
+        id: "cus_123",
+        email: "test@example.com",
+        name: "Test User"
+      },
       status: "active",
       cancel_at_period_end: false,
       cancel_at: null,
@@ -226,7 +240,11 @@ describe("subscriptionEventConductor", () => {
     const handler = subscriptionEventConductor(baseDeps);
     const event = makeEvent("customer.subscription.deleted", {
       id: "sub_123",
-      customer: "cus_123",
+      customer: {
+        id: "cus_123",
+        email: "test@example.com",
+        name: "Test User"
+      },
       status: "active",
       cancel_at_period_end: false,
       items: { data: [] },

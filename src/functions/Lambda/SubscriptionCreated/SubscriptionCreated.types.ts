@@ -40,12 +40,23 @@ export type SubscriptionCreatedEvent = {
   metadata?: Stripe.Metadata;
 };
 
-// Result type for the subscription created function
-export type SubscriptionCreatedResult = {
-  success: boolean;
-  subscriptionId: string;
-  customerId: string;
+// Type for processed subscription items with team detection
+export type ProcessedSubscriptionItem = {
+  itemId: string;
+  productId: string;
+  productName: string;
+  productMetadata: Stripe.Metadata;
+  priceId: string;
+  priceData: {
+    unitAmount: number | null;
+    currency: string;
+    recurring: Stripe.Price.Recurring | null;
+    metadata: Stripe.Metadata;
+  };
+  quantity: number;
+  expiresAt: number;
+  metadata: Stripe.Metadata;
+  // Team detection fields
   isTeamSubscription: boolean;
   teamSize?: number;
-  alreadyProcessed?: boolean;
 };
