@@ -225,7 +225,11 @@ describe("subscriptionEventConductor", () => {
 
     expect(mockHandler).toHaveBeenCalledWith({
       cancel_at_period_end: false,
-      customer: "cus_123",
+      customer: {
+        id: "cus_123",
+        email: "test@example.com",
+        name: "Test User"
+      },
       id: "sub_123",
       items: { data: [] },
       status: "active",
@@ -263,7 +267,11 @@ describe("subscriptionEventConductor", () => {
 
     expect(mockHandler).toHaveBeenCalledWith({
       id: "sub_123",
-      customer: "cus_123",
+      customer: {
+        id: "cus_123",
+        email: "test@example.com",
+        name: "Test User"
+      },
       status: "active",
     });
   });
