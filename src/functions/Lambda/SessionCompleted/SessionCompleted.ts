@@ -14,7 +14,7 @@ export const sessionCompleted =
   async (event: Stripe.CheckoutSessionCompletedEvent.Data) => {
     const { object } = event;
 
-    logger.logStripeEvent("checkout.session.completed", event as unknown as Record<string, unknown>);
+    console.log(JSON.stringify(event), 'eventeventevent');
 
     if (!object) {
       logger.warn("Missing session data, skipping", { event });

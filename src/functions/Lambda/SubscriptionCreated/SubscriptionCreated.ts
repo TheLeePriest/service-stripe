@@ -1,4 +1,3 @@
-import type Stripe from "stripe";
 import type {
   SubscriptionCreatedEvent,
   SubscriptionCreatedDependencies,
