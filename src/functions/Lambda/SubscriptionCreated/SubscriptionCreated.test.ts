@@ -47,6 +47,36 @@ const dependencies: SubscriptionCreatedDependencies = {
   logger: mockLogger as SubscriptionCreatedDependencies['logger']
 };
 
+
+mockStripe.customers.retrieve.mockResolvedValue({
+  id: 'cus_Sx7FT6sdwjv1jl',
+  object: 'customer',
+  address: null,
+  balance: 0,
+  created: 1756415122,
+  currency: 'gbp',
+  default_source: null,
+  delinquent: false,
+  description: null,
+  discount: null,
+  email: 'lpleepriest+104@gmail.com',
+  invoice_prefix: 'CM3YZNOB',
+  invoice_settings: {
+    custom_fields: null,
+    default_payment_method: null,
+    footer: null,
+    rendering_options: null
+  },
+  livemode: false,
+  metadata: {},
+  name: null,
+  phone: null,
+  preferred_locales: [ 'en-GB' ],
+  shipping: null,
+  tax_exempt: 'none',
+  test_clock: null
+});
+
 const baseEvent: SubscriptionCreatedEvent = {
   items: {
     data: [
@@ -90,6 +120,8 @@ describe("subscriptionCreated", () => {
       recurring: { interval: "month" },
       metadata: {}
     });
+
+    
 
     // Act
     const result = await subscriptionCreated(dependencies)(baseEvent);
