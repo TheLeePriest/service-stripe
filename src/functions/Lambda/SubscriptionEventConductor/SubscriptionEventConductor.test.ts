@@ -49,7 +49,6 @@ const baseDeps = {
   eventBridgeClient: {
     send: mockEventBridgeSend,
   },
-  uuidv4: vi.fn(),
   eventBusName: "bus",
   eventBusArn: "arn:bus",
   eventBusSchedulerRoleArn: "arn:role",
@@ -123,7 +122,6 @@ describe("subscriptionEventConductor", () => {
 
     expect(mockSubscriptionCreated).toHaveBeenCalledWith({
       stripe: baseDeps.stripe,
-      uuidv4: baseDeps.uuidv4,
       eventBridgeClient: baseDeps.eventBridgeClient,
       eventBusName: baseDeps.eventBusName,
       dynamoDBClient: baseDeps.dynamoDBClient,

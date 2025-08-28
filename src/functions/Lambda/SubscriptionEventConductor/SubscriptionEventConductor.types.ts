@@ -12,7 +12,6 @@ export type SubscriptionEventConductorDependencies = {
   eventBridgeClient: {
     send: (command: PutEventsCommand) => Promise<PutEventsCommandOutput>;
   };
-  uuidv4: () => string;
   eventBusName: string;
   eventBusSchedulerRoleArn: string;
   eventBusArn: string;

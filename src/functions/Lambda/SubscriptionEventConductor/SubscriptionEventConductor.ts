@@ -16,7 +16,6 @@ export const subscriptionEventConductor =
   ({
     stripe,
     eventBridgeClient,
-    uuidv4,
     eventBusName,
     eventBusArn,
     eventBusSchedulerRoleArn,
