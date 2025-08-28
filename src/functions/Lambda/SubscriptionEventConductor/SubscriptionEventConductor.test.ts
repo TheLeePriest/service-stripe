@@ -110,8 +110,6 @@ describe("subscriptionEventConductor", () => {
       items: { data: [] },
       customer: {
         id: "cus_123",
-        email: "test@example.com",
-        name: "Test User"
       },
       status: "active",
       cancel_at_period_end: false,
