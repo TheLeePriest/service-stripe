@@ -38,6 +38,9 @@ export const subscriptionCreated =
       };
     }
 
+    const userDetails = await stripe.customers.retrieve(subscription.customer);
+    console.log(userDetails, 'the user details')
+
     try {
       // Batch retrieve products and prices to reduce API calls
       const productIds = [...new Set(subscription.items.data.map(item => item.price.product as string))];
