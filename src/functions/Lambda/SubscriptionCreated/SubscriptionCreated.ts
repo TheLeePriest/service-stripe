@@ -173,8 +173,6 @@ export const subscriptionCreated =
               Detail: JSON.stringify({
                 stripeSubscriptionId: subscription.id,
                 stripeCustomerId: subscription.customer,
-                customerEmail: subscription.customerEmail,
-                customerName: subscription.customerName,
                 items,
                 status: subscription.status,
                 createdAt: subscription.created,

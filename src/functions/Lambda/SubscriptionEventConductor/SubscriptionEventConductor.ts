@@ -28,11 +28,6 @@ export const subscriptionEventConductor =
     const stripeEvent = event.detail;
     const subscription = stripeEvent.data.object;
     
-    // Check if customer object is available in the webhook event
-    const customer = stripeEvent.data.object.customer;
-    const customerEmail = customer && typeof customer === 'object' && 'email' in customer ? customer.email || '' : '';
-    const customerName = customer && typeof customer === 'object' && 'name' in customer ? customer.name || '' : '';
-
     logger.info("Processing subscription event", {
       eventType: stripeEvent.type,
       subscriptionId: subscription.id,
