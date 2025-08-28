@@ -131,8 +131,6 @@ describe("subscriptionEventConductor", () => {
       created: expect.any(Number),
       customer: {
         id: "cus_123",
-        email: "test@example.com",
-        name: "Test User"
       },
       id: "sub_123",
       items: { data: [] },
@@ -151,9 +149,7 @@ describe("subscriptionEventConductor", () => {
       items: { data: [] },
       customer: {
         id: "cus_123",
-        email: "test@example.com",
-        name: "Test User"
-      },
+        },
       status: "active",
       cancel_at_period_end: false,
       metadata: { 
@@ -176,9 +172,7 @@ describe("subscriptionEventConductor", () => {
       created: expect.any(Number),
       customer: {
         id: "cus_123",
-        email: "test@example.com",
-        name: "Test User"
-      },
+        },
       id: "sub_123",
       items: { data: [] },
       status: "active",
@@ -200,9 +194,7 @@ describe("subscriptionEventConductor", () => {
       items: { data: [] },
       customer: {
         id: "cus_123",
-        email: "test@example.com",
-        name: "Test User"
-      },
+        },
       status: "active",
       cancel_at_period_end: false,
       cancel_at: null,
@@ -230,9 +222,7 @@ describe("subscriptionEventConductor", () => {
       cancel_at_period_end: false,
       customer: {
         id: "cus_123",
-        email: "test@example.com",
-        name: "Test User"
-      },
+        },
       id: "sub_123",
       items: { data: [] },
       status: "active",
@@ -249,9 +239,7 @@ describe("subscriptionEventConductor", () => {
       id: "sub_123",
       customer: {
         id: "cus_123",
-        email: "test@example.com",
-        name: "Test User"
-      },
+        },
       status: "active",
       cancel_at_period_end: false,
       items: { data: [] },
@@ -272,9 +260,7 @@ describe("subscriptionEventConductor", () => {
       id: "sub_123",
       customer: {
         id: "cus_123",
-        email: "test@example.com",
-        name: "Test User"
-      },
+        },
       status: "active",
     });
   });
