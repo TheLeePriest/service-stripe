@@ -1,11 +1,9 @@
-import type Stripe from "stripe";
 import type {
   SubscriptionCreatedEvent,
   SubscriptionCreatedDependencies,
   SubscriptionCreatedResult,
 } from "./SubscriptionCreated.types";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import type { Logger } from "../types/utils.types";
 import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 
 export const subscriptionCreated =
@@ -123,8 +121,8 @@ export const subscriptionCreated =
               Detail: JSON.stringify({
                 stripeSubscriptionId: subscription.id,
                 stripeCustomerId: subscription.customer,
-                customerEmail: "", // Will be populated by downstream services
-                customerName: "", // Will be populated by downstream services
+                customerEmail: subscription.customerEmail,
+                customerName: subscription.customerName,
                 items,
                 status: subscription.status,
                 createdAt: subscription.created,

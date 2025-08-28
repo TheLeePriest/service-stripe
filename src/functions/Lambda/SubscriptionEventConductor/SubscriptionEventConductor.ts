@@ -29,6 +29,14 @@ export const subscriptionEventConductor =
   async (event: EventBridgeEvent<string, StripeEventBridgeDetail>) => {
     const stripeEvent = event.detail;
     const subscription = stripeEvent.data.object;
+    console.log("stripeEvent", stripeEvent);
+    console.log("subscription", subscription);
+    // Check if customer object is available in the event data
+    const customer = subscription.customer;
+    const customerEmail = typeof customer === 'string' ? '' : 
+      ('deleted' in customer && customer.deleted) ? '' : customer.email || '';
+    const customerName = typeof customer === 'string' ? '' : 
+      ('deleted' in customer && customer.deleted) ? '' : customer.name || '';
 
     logger.info("Processing subscription event", {
       eventType: stripeEvent.type,
@@ -111,6 +119,8 @@ export const subscriptionEventConductor =
               }),
             },
             customer: subscription.customer as string,
+            customerEmail,
+            customerName,
             id: subscription.id,
             status: subscription.status,
             cancel_at_period_end: subscription.cancel_at_period_end,

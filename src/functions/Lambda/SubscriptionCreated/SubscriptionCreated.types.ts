@@ -29,6 +29,8 @@ export type SubscriptionCreatedEvent = {
     }>;
   };
   customer: string;
+  customerEmail: string;
+  customerName: string;
   id: string;
   status: Stripe.Subscription.Status;
   cancel_at_period_end: boolean;

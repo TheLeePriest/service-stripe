@@ -60,6 +60,8 @@ const baseEvent: SubscriptionCreatedEvent = {
     ]
   },
   customer: "cus_123",
+  customerEmail: "test@example.com",
+  customerName: "Test User",
   id: "sub_123",
   status: "active",
   cancel_at_period_end: false,
