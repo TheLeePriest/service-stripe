@@ -123,6 +123,7 @@ describe("subscriptionEventConductor", () => {
 
     expect(mockSubscriptionCreated).toHaveBeenCalledWith({
       stripe: baseDeps.stripe,
+      uuidv4: baseDeps.uuidv4,
       eventBridgeClient: baseDeps.eventBridgeClient,
       eventBusName: baseDeps.eventBusName,
       dynamoDBClient: baseDeps.dynamoDBClient,
@@ -132,7 +133,11 @@ describe("subscriptionEventConductor", () => {
     expect(mockHandler).toHaveBeenCalledWith({
       cancel_at_period_end: false,
       created: expect.any(Number),
-      customer: "cus_123",
+      customer: {
+        id: "cus_123",
+        email: "test@example.com",
+        name: "Test User"
+      },
       customerEmail: "test@example.com",
       customerName: "Test User",
       id: "sub_123",
@@ -175,7 +180,11 @@ describe("subscriptionEventConductor", () => {
     expect(mockHandler).toHaveBeenCalledWith({
       cancel_at_period_end: false,
       created: expect.any(Number),
-      customer: "cus_123",
+      customer: {
+        id: "cus_123",
+        email: "test@example.com",
+        name: "Test User"
+      },
       id: "sub_123",
       items: { data: [] },
       status: "active",
