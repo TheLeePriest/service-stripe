@@ -136,8 +136,6 @@ describe("subscriptionEventConductor", () => {
         email: "test@example.com",
         name: "Test User"
       },
-      customerEmail: "test@example.com",
-      customerName: "Test User",
       id: "sub_123",
       items: { data: [] },
       status: "active",
