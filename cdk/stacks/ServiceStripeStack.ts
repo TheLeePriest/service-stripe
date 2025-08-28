@@ -172,7 +172,7 @@ export class ServiceStripeStack extends Stack {
     );
 
     const productsTable = new Table(this, `${serviceName}-products-${stage}`, {
-      tableName: `stripe-products-${stage}`,
+      tableName: `${serviceName}-stripe-products-${stage}`,
       partitionKey: { name: "PK", type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       sortKey: { name: "SK", type: AttributeType.STRING },
@@ -182,7 +182,7 @@ export class ServiceStripeStack extends Stack {
     });
 
     const idempotencyTable = new Table(this, `${serviceName}-idempotency-${stage}`, {
-      tableName: `stripe-idempotency-${stage}`,
+      tableName: `${serviceName}-stripe-idempotency-${stage}`,
       partitionKey: { name: "PK", type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       timeToLiveAttribute: "ttl",
