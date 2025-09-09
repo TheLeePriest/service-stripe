@@ -23,7 +23,7 @@ export const sessionCompleted =
 
     const sessionId = object.id;
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
-      expand: ["customer", "subscription", "subscription.items.data.price"],
+      expand: ["customer", "subscription", "subscription.items.data.price", "payment_intent"],
     });
 
     const { customer_details: customerDetails } = session;
@@ -39,7 +39,11 @@ export const sessionCompleted =
     const now = new Date().toISOString();
 
     // Extract name from customer_details (Stripe's default billing name field)
-    const fullName = customerDetails?.name || "";
+    // Fallback to payment intent billing details if customer_details.name is empty
+    const paymentIntent = session.payment_intent as Stripe.PaymentIntent;
+    const fullName = customerDetails?.name || 
+                     paymentIntent?.charges?.data?.[0]?.billing_details?.name || 
+                     "";
     const organizationField = session.custom_fields?.find(field => field.key === 'organization');
     const organization = organizationField?.text?.value || "";
     
