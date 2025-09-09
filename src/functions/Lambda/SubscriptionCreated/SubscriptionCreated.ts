@@ -56,6 +56,8 @@ export const subscriptionCreated =
       subscription.customer,
     )) as Stripe.Customer;
 
+    console.log(userDetails, "userDetails");
+
     try {
       // Batch retrieve products and prices to reduce API calls
       const productIds = [
