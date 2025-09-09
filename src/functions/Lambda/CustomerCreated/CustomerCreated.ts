@@ -71,7 +71,7 @@ export const customerCreated =
       let customerName = customer.name as string | undefined;
       
       // If customer name is empty, get it from the most recent checkout session
-      // All customers go through checkout (including trials) so this should always work
+      // For trials, billing_address_collection is disabled so customerDetails.name may be empty
       if (!customerName) {
         logger.info("Customer name is empty, getting from checkout session", {
           customerId,
@@ -87,10 +87,19 @@ export const customerCreated =
             const session = sessions.data[0];
             customerName = session.customer_details?.name || "";
             
-            logger.info("Retrieved customer name from checkout session", {
-              customerId,
-              customerName,
-            });
+            // For trials, if no billing name is collected, use email as fallback
+            if (!customerName && session.payment_method_collection === 'if_required') {
+              customerName = session.customer_details?.email || customerEmail || "";
+              logger.info("Using email as name fallback for trial customer", {
+                customerId,
+                customerName,
+              });
+            } else {
+              logger.info("Retrieved customer name from checkout session", {
+                customerId,
+                customerName,
+              });
+            }
           }
         } catch (error) {
           logger.warn("Failed to retrieve checkout session for customer name", {
