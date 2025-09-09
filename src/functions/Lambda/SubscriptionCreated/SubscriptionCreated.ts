@@ -206,6 +206,7 @@ export const subscriptionCreated =
               EventBusName: eventBusName,
               Detail: JSON.stringify({
                 customerEmail: userDetails.email,
+                customerName: userDetails.name,
                 stripeSubscriptionId: subscription.id,
                 stripeCustomerId: subscription.customer,
                 items,
