@@ -70,14 +70,14 @@ export const customerCreated =
       const customerEmail = customer.email as string;
       let customerName = customer.name as string | undefined;
       
-      // If customer name is empty, try to get it from checkout sessions
+      // If customer name is empty, get it from the most recent checkout session
+      // All customers go through checkout (including trials) so this should always work
       if (!customerName) {
-        logger.info("Customer name is empty, checking checkout sessions", {
+        logger.info("Customer name is empty, getting from checkout session", {
           customerId,
         });
         
         try {
-          // Get the most recent checkout session for this customer
           const sessions = await stripeClient.checkout.sessions.list({
             customer: customerId,
             limit: 1,
@@ -85,30 +85,12 @@ export const customerCreated =
           
           if (sessions.data.length > 0) {
             const session = sessions.data[0];
-            const customerDetails = session.customer_details;
+            customerName = session.customer_details?.name || "";
             
-            // Try to get name from customer_details first
-            if (customerDetails?.name) {
-              customerName = customerDetails.name;
-              logger.info("Found customer name in checkout session customer_details", {
-                customerId,
-                customerName,
-              });
-            } else {
-              // Fallback to payment intent billing details
-              const sessionWithPaymentIntent = await stripeClient.checkout.sessions.retrieve(session.id, {
-                expand: ["payment_intent"],
-              });
-              
-              const paymentIntent = sessionWithPaymentIntent.payment_intent as Stripe.PaymentIntent;
-              if (paymentIntent?.charges?.data?.[0]?.billing_details?.name) {
-                customerName = paymentIntent.charges.data[0].billing_details.name;
-                logger.info("Found customer name in payment intent billing details", {
-                  customerId,
-                  customerName,
-                });
-              }
-            }
+            logger.info("Retrieved customer name from checkout session", {
+              customerId,
+              customerName,
+            });
           }
         } catch (error) {
           logger.warn("Failed to retrieve checkout session for customer name", {
