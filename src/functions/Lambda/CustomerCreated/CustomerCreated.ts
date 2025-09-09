@@ -3,9 +3,10 @@ import type { CustomerCreatedEvent, CustomerCreatedDependencies } from "./Custom
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import type { Logger } from "../types/utils.types";
 import { ensureIdempotency, generateEventId } from "../lib/idempotency";
+import type Stripe from "stripe";
 
 export const customerCreated =
-  ({ eventBridgeClient, eventBusName, logger }: CustomerCreatedDependencies) =>
+  ({ eventBridgeClient, eventBusName, stripeClient, logger }: CustomerCreatedDependencies) =>
   async (event: EventBridgeEvent<string, unknown>) => {
     logger.info("CustomerCreated handler invoked", {
       eventId: event.id,
@@ -67,7 +68,55 @@ export const customerCreated =
 
       const customerId = customer.id as string;
       const customerEmail = customer.email as string;
-      const customerName = customer.name as string | undefined;
+      let customerName = customer.name as string | undefined;
+      
+      // If customer name is empty, try to get it from checkout sessions
+      if (!customerName) {
+        logger.info("Customer name is empty, checking checkout sessions", {
+          customerId,
+        });
+        
+        try {
+          // Get the most recent checkout session for this customer
+          const sessions = await stripeClient.checkout.sessions.list({
+            customer: customerId,
+            limit: 1,
+          });
+          
+          if (sessions.data.length > 0) {
+            const session = sessions.data[0];
+            const customerDetails = session.customer_details;
+            
+            // Try to get name from customer_details first
+            if (customerDetails?.name) {
+              customerName = customerDetails.name;
+              logger.info("Found customer name in checkout session customer_details", {
+                customerId,
+                customerName,
+              });
+            } else {
+              // Fallback to payment intent billing details
+              const sessionWithPaymentIntent = await stripeClient.checkout.sessions.retrieve(session.id, {
+                expand: ["payment_intent"],
+              });
+              
+              const paymentIntent = sessionWithPaymentIntent.payment_intent as Stripe.PaymentIntent;
+              if (paymentIntent?.charges?.data?.[0]?.billing_details?.name) {
+                customerName = paymentIntent.charges.data[0].billing_details.name;
+                logger.info("Found customer name in payment intent billing details", {
+                  customerId,
+                  customerName,
+                });
+              }
+            }
+          }
+        } catch (error) {
+          logger.warn("Failed to retrieve checkout session for customer name", {
+            customerId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
 
       logger.info("Processing customer creation", {
         customerId,
