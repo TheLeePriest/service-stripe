@@ -36,11 +36,14 @@ export const sessionCompleted =
     }
 
     const email = customerDetails?.email || customer.email;
-    const organization = customerDetails?.name || customer.name || "";
     const now = new Date().toISOString();
 
-    // Extract firstName and lastName from customer name
-    const fullName = customer.name || customerDetails?.name || "";
+    // Extract name from customer_details (Stripe's default billing name field)
+    const fullName = customerDetails?.name || "";
+    const organizationField = session.custom_fields?.find(field => field.key === 'organization');
+    const organization = organizationField?.text?.value || "";
+    
+    // Extract firstName and lastName from the billing name field
     const nameParts = fullName.trim().split(/\s+/);
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ") || "";
@@ -85,15 +88,15 @@ export const sessionCompleted =
               Detail: JSON.stringify({
                 stripeCustomerId: customer.id,
                 customerEmail: email,
-                customerName: customer.name,
+                customerName: fullName,
                 createdAt: Math.floor(Date.now() / 1000),
                 customerData: {
                   id: customer.id,
                   email: email,
-                  name: customer.name,
+                  name: fullName,
                 },
                 userName: email,
-                name: customer.name,
+                name: fullName,
                 signUpDate: now,
                 stripeSubscriptionId: subscription.id,
                 subscriptionStatus: subscription.status,
