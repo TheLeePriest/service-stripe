@@ -220,6 +220,7 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 512, // Increased for DynamoDB operations
           environment: {
+            STAGE: stage,
             STRIPE_SECRET_KEY,
             PRODUCTS_TABLE_NAME: productsTable.tableName,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
@@ -279,6 +280,7 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 256,
           environment: {
+            STAGE: stage,
             STRIPE_SECRET_KEY,
             PRODUCTS_TABLE_NAME: productsTable.tableName,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
