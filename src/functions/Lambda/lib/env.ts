@@ -5,7 +5,6 @@ const AppEnvironmentSchema = z.object({
   TARGET_EVENT_BUS_NAME: z.string().optional(),
   IDEMPOTENCY_TABLE_NAME: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
-  PRODUCTS_TABLE_NAME: z.string().optional(),
   API_ID: z.string().optional(),
   EVENT_BUS_NAME: z.string().optional(),
   SCHEDULER_ROLE_ARN: z.string().optional(),
@@ -26,7 +25,6 @@ type EnvType = {
   TARGET_EVENT_BUS_NAME?: string;
   IDEMPOTENCY_TABLE_NAME?: string;
   STRIPE_SECRET_KEY?: string;
-  PRODUCTS_TABLE_NAME?: string;
   API_ID?: string;
   EVENT_BUS_NAME?: string;
   SCHEDULER_ROLE_ARN?: string;

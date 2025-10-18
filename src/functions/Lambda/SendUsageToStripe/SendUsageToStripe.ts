@@ -1,6 +1,79 @@
 import type { SQSEvent } from "aws-lambda";
 import type { SendUsageToStripeDependencies } from "./SendUsageToStripe.types";
 
+// ============================================================================
+// STRIPE PRICE ID RESOLUTION
+// ============================================================================
+
+/**
+ * Queries Stripe to get the correct price ID for the customer's subscription
+ * Falls back to the provided meteredPriceId if Stripe query fails
+ */
+const getPriceIdFromStripe = async (
+  stripeClient: SendUsageToStripeDependencies['stripeClient'],
+  stripeCustomerId: string,
+  productId: string,
+  subscriptionType: string | undefined,
+  fallbackMeteredPriceId: string | undefined,
+  enterpriseUsagePriceId: string | undefined,
+  logger: SendUsageToStripeDependencies['logger']
+): Promise<string | undefined> => {
+  try {
+    // For Enterprise/Team subscriptions, use the enterprise price directly
+    if (subscriptionType === "TEAM" || subscriptionType === "ENTERPRISE") {
+      logger.info("Using enterprise price for Team/Enterprise subscription", {
+        subscriptionType,
+        enterprisePriceId: enterpriseUsagePriceId,
+      });
+      return enterpriseUsagePriceId;
+    }
+
+    // For Pro subscriptions, query Stripe to get the customer's active subscription
+    const subscriptions = await stripeClient.subscriptions.list({
+      customer: stripeCustomerId,
+      status: 'active',
+      limit: 1,
+    });
+
+    if (subscriptions.data.length === 0) {
+      logger.warn("No active subscription found for customer, using fallback", {
+        stripeCustomerId,
+        fallbackMeteredPriceId,
+      });
+      return fallbackMeteredPriceId;
+    }
+
+    const subscription = subscriptions.data[0];
+    const usageItem = subscription.items.data.find(item => 
+      item.price.product === productId
+    );
+
+    if (usageItem?.price.id) {
+      logger.info("Found price ID from Stripe subscription", {
+        stripeCustomerId,
+        priceId: usageItem.price.id,
+        productId,
+      });
+      return usageItem.price.id;
+    }
+
+    logger.warn("No usage price found in subscription, using fallback", {
+      stripeCustomerId,
+      productId,
+      fallbackMeteredPriceId,
+    });
+    return fallbackMeteredPriceId;
+
+  } catch (error) {
+    logger.warn("Failed to query Stripe for price ID, using fallback", {
+      error: error instanceof Error ? error.message : String(error),
+      stripeCustomerId,
+      fallbackMeteredPriceId,
+    });
+    return fallbackMeteredPriceId;
+  }
+};
+
 export const sendUsageToStripe =
   ({ stripeClient, logger, config }: SendUsageToStripeDependencies) =>
   async (event: SQSEvent) => {
@@ -36,6 +109,7 @@ export const sendUsageToStripe =
           resourcesAnalyzed, 
           subscriptionType, 
           meteredPriceId,
+          productId,
           isOverusage,
           overusageAmount,
           licenseType
@@ -71,40 +145,28 @@ export const sendUsageToStripe =
           continue;
         }
 
-        // Determine the correct event name and price ID based on subscription type
-        let eventName: string;
-        let priceId: string | undefined;
+        // Query Stripe to get the correct price ID for this customer's subscription
+        const priceId = await getPriceIdFromStripe(
+          stripeClient,
+          stripeCustomerId,
+          productId,
+          subscriptionType,
+          meteredPriceId,
+          config.enterpriseUsagePriceId,
+          logger
+        );
 
-        if (subscriptionType === "TEAM" || subscriptionType === "ENTERPRISE") {
-          // Enterprise/Team subscription - use Enterprise usage price
-          eventName = "enterprise_analysis_usage";
-          priceId = config.enterpriseUsagePriceId;
-          
-          logger.info("Using Enterprise usage price", {
-            eventName,
-            priceId,
-            subscriptionType,
-            isOverusage,
-            overusageAmount,
-          });
-        } else {
-          // Individual/Pro subscription - use Pro usage price
-          eventName = "pro_analysis_usage";
-          priceId = meteredPriceId;
-          
-          logger.info("Using Pro usage price", {
-            eventName,
-            priceId,
-            subscriptionType,
-            isOverusage,
-            overusageAmount,
-          });
-        }
+        logger.info("Price ID determined", {
+          priceId,
+          subscriptionType,
+          isOverusage,
+          overusageAmount,
+        });
 
         // Always send meter events to Stripe for metered pricing
         // Stripe needs to know about ALL usage to track when customers hit tier limits (e.g., 10k resources)
         const meterEvent = {
-          event_name: eventName,
+          event_name: 'cdk_insights_usage',
           payload: {
             stripe_customer_id: stripeCustomerId,
             value: resourcesAnalyzed, // Always send the full resources analyzed for metered pricing
@@ -142,7 +204,7 @@ export const sendUsageToStripe =
           resourcesAnalyzed,
           messageId: record.messageId,
           subscriptionType,
-          eventName,
+          eventName: 'cdk_insights_usage',
           priceId,
           isOverusage,
           overusageAmount,
