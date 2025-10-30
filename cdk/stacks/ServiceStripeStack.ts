@@ -94,7 +94,7 @@ export class ServiceStripeStack extends Stack {
       targets: [new SqsQueue(stripeUsageQueue)],
       eventPattern: {
         source: ["service.license"],
-        detailType: ["LicenseUsageRecorded"],
+        detailType: ["UsageRecorded"],
       },
     });
 
