@@ -20,13 +20,6 @@ export type SendUsageToStripeDependencies = {
         ) => Promise<Stripe.Response<unknown>>;
       };
     };
-    subscriptions: {
-      list: (params: {
-        customer: string;
-        status: 'active';
-        limit: number;
-      }) => Promise<Stripe.Response<Stripe.ApiList<Stripe.Subscription>>>;
-    };
   };
   logger: StripeLogger;
   config: {
