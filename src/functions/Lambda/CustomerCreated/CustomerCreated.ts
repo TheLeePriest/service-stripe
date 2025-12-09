@@ -85,7 +85,13 @@ export const customerCreated =
           
           if (sessions.data.length > 0) {
             const session = sessions.data[0];
-            customerName = session.customer_details?.name || "";
+            const customFullName = session.custom_fields?.find(
+              (field) => field.key === "full_name",
+            )?.text?.value;
+            customerName =
+              session.customer_details?.name ||
+              customFullName ||
+              "";
             
             // For trials, if no billing name is collected, use email as fallback
             if (!customerName && session.payment_method_collection === 'if_required') {

@@ -39,12 +39,19 @@ export const sessionCompleted =
     const now = new Date().toISOString();
 
     // Extract name from customer_details (Stripe's default billing name field)
-    // Fallback to payment intent billing details if customer_details.name is empty
+    // Fallback order: payment intent billing name -> custom_fields.full_name (for trials) -> empty
     const paymentIntent = session.payment_intent as Stripe.PaymentIntent;
-    const fullName = customerDetails?.name || 
-                     paymentIntent?.charges?.data?.[0]?.billing_details?.name || 
-                     "";
-    const organizationField = session.custom_fields?.find(field => field.key === 'organization');
+    const customFullName = session.custom_fields?.find(
+      (field) => field.key === "full_name",
+    )?.text?.value;
+    const fullName =
+      customerDetails?.name ||
+      paymentIntent?.charges?.data?.[0]?.billing_details?.name ||
+      customFullName ||
+      "";
+    const organizationField = session.custom_fields?.find(
+      (field) => field.key === "organization",
+    );
     const organization = organizationField?.text?.value || "";
     
     // Extract firstName and lastName from the billing name field
