@@ -135,6 +135,55 @@ export const subscriptionEventConductor =
       }
 
       case "customer.subscription.updated": {
+        // Handle in-place upgrade updates if metadata signals an upgrade
+        const isUpgradeUpdate = subscription.metadata?.is_upgrade === "true";
+        if (isUpgradeUpdate) {
+          const upgradeEvent = {
+            items: {
+              data: subscription.items.data.map((item) => {
+                const productId =
+                  typeof item.price === "string"
+                    ? item.price
+                    : typeof item.price.product === "string"
+                      ? item.price.product
+                      : item.price.product.id;
+                const quantityValue = item.quantity ?? 1;
+                return {
+                  id: item.id,
+                  price: { product: productId, id: item.price.id },
+                  quantity: quantityValue,
+                  current_period_end: item.current_period_end,
+                  metadata: item.metadata,
+                };
+              }),
+            },
+            customer: subscription.customer as string,
+            id: subscription.id,
+            status: subscription.status,
+            cancel_at_period_end: subscription.cancel_at_period_end,
+            ...(subscription.trial_start && {
+              trial_start: subscription.trial_start,
+            }),
+            ...(subscription.trial_end && {
+              trial_end: subscription.trial_end,
+            }),
+            created: subscription.created,
+            metadata: subscription.metadata || {},
+          };
+
+          logger.info("Sending subscription upgraded event (updated)", {
+            upgradeEvent,
+          });
+
+          await subscriptionUpgraded({
+            stripe,
+            eventBridgeClient,
+            eventBusName,
+            logger,
+          })(upgradeEvent);
+          break;
+        }
+
         const updatedEvent: SubscriptionUpdatedEvent = {
           items: {
             data: subscription.items.data.map((item) => {
