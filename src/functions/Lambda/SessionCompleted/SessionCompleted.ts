@@ -1,16 +1,10 @@
 import type Stripe from "stripe";
 import type { SessionCompletedDependencies } from "./SessionCompleted.types";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import type { Logger } from "../types/utils.types";
 import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 
 export const sessionCompleted =
-  ({ stripe, eventBridgeClient, eventBusName, logger, dynamoDBClient, idempotencyTableName }: SessionCompletedDependencies & { 
-    logger: Logger;
-    dynamoDBClient: DynamoDBClient;
-    idempotencyTableName: string;
-  }) =>
+  ({ stripe, eventBridgeClient, eventBusName, logger, dynamoDBClient, idempotencyTableName }: SessionCompletedDependencies) =>
   async (event: Stripe.CheckoutSessionCompletedEvent.Data) => {
     const { object } = event;
 
@@ -48,6 +42,7 @@ export const sessionCompleted =
       customerDetails?.name ||
       paymentIntent?.charges?.data?.[0]?.billing_details?.name ||
       customFullName ||
+      (session.metadata as Record<string, unknown>)?.customer_name?.toString() ||
       "";
     const organizationField = session.custom_fields?.find(
       (field) => field.key === "organization",

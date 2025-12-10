@@ -68,7 +68,9 @@ export const customerCreated =
 
       const customerId = customer.id as string;
       const customerEmail = customer.email as string;
-      let customerName = customer.name as string | undefined;
+      let customerName =
+        (customer.name as string | undefined) ||
+        (customer.metadata?.customer_name as string | undefined);
       
       // If customer name is empty, get it from the most recent checkout session
       // For trials, billing_address_collection is disabled so customerDetails.name may be empty
@@ -91,6 +93,7 @@ export const customerCreated =
             customerName =
               session.customer_details?.name ||
               customFullName ||
+              (session.metadata as Record<string, unknown>)?.customer_name?.toString() ||
               "";
             
             // For trials, if no billing name is collected, use email as fallback
