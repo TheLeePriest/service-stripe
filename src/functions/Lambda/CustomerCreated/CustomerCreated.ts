@@ -1,13 +1,14 @@
 import type { EventBridgeEvent } from "aws-lambda";
-import type { CustomerCreatedEvent, CustomerCreatedDependencies } from "./CustomerCreated.types";
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import type { Logger } from "../types/utils.types";
-import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 import type Stripe from "stripe";
+import type {
+  CustomerCreatedEvent,
+  CustomerCreatedDependencies,
+} from "./CustomerCreated.types";
+import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 
 export const customerCreated =
-  ({ eventBridgeClient, eventBusName, stripeClient, logger }: CustomerCreatedDependencies) =>
-  async (event: EventBridgeEvent<string, unknown>) => {
+  ({ eventBridgeClient, eventBusName, logger }: CustomerCreatedDependencies) =>
+  async (event: EventBridgeEvent<"Stripe Event", Stripe.Event>) => {
     logger.info("CustomerCreated handler invoked", {
       eventId: event.id,
       source: event.source,
@@ -22,40 +23,28 @@ export const customerCreated =
     });
 
     try {
-      // Extract the Stripe event from the EventBridge event
-      const stripeEvent = event.detail as Record<string, unknown>;
-      
-      logger.info("Extracted Stripe event", {
-        stripeEventType: stripeEvent.type,
-        stripeEventId: stripeEvent.id,
-        hasData: !!stripeEvent.data,
-        hasObject: !!(stripeEvent.data as Record<string, unknown>)?.object,
-      });
+      const stripeEvent = event.detail;
 
-      logger.debug("Stripe event detail", {
-        stripeEvent: JSON.stringify(stripeEvent, null, 2),
-      });
-
-      const stripeData = stripeEvent.data as Record<string, unknown>;
-      if (!stripeData?.object) {
-        logger.error("Missing stripe event data.object", {
-          stripeEvent: stripeEvent,
+      if (stripeEvent.type !== "customer.created") {
+        logger.info("Ignoring non customer.created event", {
+          stripeEventType: stripeEvent.type,
         });
+        return;
+      }
+
+      if (!stripeEvent.data?.object) {
+        logger.error("Missing stripe event data.object", { stripeEventId: stripeEvent.id });
         throw new Error("Invalid Stripe event structure: missing data.object");
       }
 
-      const customer = stripeData.object as Record<string, unknown>;
-      
+      const customer = stripeEvent.data.object as Stripe.Customer;
+
       logger.info("Extracted customer data", {
         customerId: customer.id,
         customerEmail: customer.email,
         customerName: customer.name,
         customerCreated: customer.created,
         customerMetadata: customer.metadata,
-      });
-
-      logger.debug("Full customer object", {
-        customer: JSON.stringify(customer, null, 2),
       });
 
       if (!customer.id || !customer.email) {
@@ -66,14 +55,18 @@ export const customerCreated =
         throw new Error("Customer missing required fields: id or email");
       }
 
-      const customerId = customer.id as string;
-      const customerEmail = customer.email as string;
-      const customerMetadata = (customer.metadata ||
-        {}) as Record<string, string | undefined>;
-      const customerName =
-        (customer.name as string | undefined) ||
-        customerMetadata.customer_name ||
-        customerEmail;
+      // Require a name; if absent, defer to session-completed flow that carries full_name
+      if (!customer.name) {
+        logger.warn("Customer name missing on customer.created; skipping user creation", {
+          customerId: customer.id,
+          customerEmail: customer.email,
+        });
+        return;
+      }
+
+      const customerId = customer.id;
+      const customerEmail = customer.email;
+      const customerName = customer.name;
 
       logger.info("Processing customer creation", {
         customerId,
