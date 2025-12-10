@@ -56,13 +56,19 @@ export const subscriptionCreated =
       subscription.customer,
     )) as Stripe.Customer;
 
-    // Gracefully handle missing email to avoid crash
-    const customerEmail = customer.email || "";
-    const customerName = customer.name || "";
-    if (!customer.email) {
+    // Resolve email/name with metadata fallbacks
+    const customerEmail =
+      customer.email ||
+      (subscription.metadata?.customer_email as string | undefined) ||
+      (subscription.metadata?.email as string | undefined) ||
+      "";
+    const customerName = customer.name || customerEmail || "";
+
+    if (!customerEmail) {
       logger.warn("Customer email missing on subscription.created", {
         subscriptionId: subscription.id,
         customerId: subscription.customer,
+        metadata: subscription.metadata,
       });
     }
 
