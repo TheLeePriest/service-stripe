@@ -68,60 +68,12 @@ export const customerCreated =
 
       const customerId = customer.id as string;
       const customerEmail = customer.email as string;
-      let customerName =
+      const customerMetadata = (customer.metadata ||
+        {}) as Record<string, string | undefined>;
+      const customerName =
         (customer.name as string | undefined) ||
-        (customer.metadata?.customer_name as string | undefined);
-      
-      // If customer name is empty, get it from the most recent checkout session
-      // For trials, billing_address_collection is disabled so customerDetails.name may be empty
-      if (!customerName) {
-        logger.info("Customer name is empty, getting from checkout session", {
-          customerId,
-        });
-        
-        try {
-          const sessions = await stripeClient.checkout.sessions.list({
-            customer: customerId,
-            limit: 3,
-            expand: ["data.custom_fields", "data.customer_details", "data.payment_intent"],
-          });
-          
-          const completedSession = sessions.data.find(
-            (s) => s.status === "complete" || s.payment_status === "paid",
-          ) || sessions.data[0];
-
-          if (completedSession) {
-            const session = completedSession;
-            const customFullName = session.custom_fields?.find(
-              (field) => field.key === "full_name",
-            )?.text?.value;
-            customerName =
-              session.customer_details?.name ||
-              customFullName ||
-              (session.metadata as Record<string, unknown>)?.customer_name?.toString() ||
-              "";
-            
-            // For trials, if no billing name is collected, use email as fallback
-            if (!customerName && session.payment_method_collection === 'if_required') {
-              customerName = session.customer_details?.email || customerEmail || "";
-              logger.info("Using email as name fallback for trial customer", {
-                customerId,
-                customerName,
-              });
-            } else {
-              logger.info("Retrieved customer name from checkout session", {
-                customerId,
-                customerName,
-              });
-            }
-          }
-        } catch (error) {
-          logger.warn("Failed to retrieve checkout session for customer name", {
-            customerId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
+        customerMetadata.customer_name ||
+        customerEmail;
 
       logger.info("Processing customer creation", {
         customerId,
