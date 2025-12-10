@@ -55,18 +55,15 @@ export const customerCreated =
         throw new Error("Customer missing required fields: id or email");
       }
 
-      // Require a name; if absent, defer to session-completed flow that carries full_name
-      if (!customer.name) {
-        logger.warn("Customer name missing on customer.created; skipping user creation", {
-          customerId: customer.id,
-          customerEmail: customer.email,
-        });
-        return;
-      }
-
       const customerId = customer.id;
       const customerEmail = customer.email;
-      const customerName = customer.name;
+      const customerMetadata = (customer.metadata ||
+        {}) as Record<string, string | undefined>;
+      const customerName =
+        customer.name ||
+        customerMetadata.customer_name ||
+        customerEmail ||
+        "CDK Insights User";
 
       logger.info("Processing customer creation", {
         customerId,
