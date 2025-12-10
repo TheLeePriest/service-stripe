@@ -52,11 +52,19 @@ export const subscriptionCreated =
       };
     }
 
-    const userDetails = (await stripe.customers.retrieve(
+    const customer = (await stripe.customers.retrieve(
       subscription.customer,
     )) as Stripe.Customer;
 
-    console.log(userDetails, "userDetails");
+    // Gracefully handle missing email to avoid crash
+    const customerEmail = customer.email || "";
+    const customerName = customer.name || "";
+    if (!customer.email) {
+      logger.warn("Customer email missing on subscription.created", {
+        subscriptionId: subscription.id,
+        customerId: subscription.customer,
+      });
+    }
 
     try {
       // Batch retrieve products and prices to reduce API calls
@@ -205,8 +213,8 @@ export const subscriptionCreated =
               DetailType: "SubscriptionCreated",
               EventBusName: eventBusName,
               Detail: JSON.stringify({
-                customerEmail: userDetails.email,
-                customerName: userDetails.name,
+                customerEmail: customerEmail,
+                customerName: customerName,
                 stripeSubscriptionId: subscription.id,
                 stripeCustomerId: subscription.customer,
                 items,
