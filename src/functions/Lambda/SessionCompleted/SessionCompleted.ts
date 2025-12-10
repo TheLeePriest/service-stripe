@@ -17,7 +17,14 @@ export const sessionCompleted =
 
     const sessionId = object.id;
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
-      expand: ["customer", "subscription", "subscription.items.data.price", "payment_intent"],
+      expand: [
+        "customer",
+        "subscription",
+        "subscription.items.data.price",
+        "payment_intent",
+        "custom_fields",
+        "customer_details",
+      ],
     });
 
     const { customer_details: customerDetails } = session;

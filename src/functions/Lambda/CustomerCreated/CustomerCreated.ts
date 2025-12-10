@@ -82,11 +82,16 @@ export const customerCreated =
         try {
           const sessions = await stripeClient.checkout.sessions.list({
             customer: customerId,
-            limit: 1,
+            limit: 3,
+            expand: ["data.custom_fields", "data.customer_details", "data.payment_intent"],
           });
           
-          if (sessions.data.length > 0) {
-            const session = sessions.data[0];
+          const completedSession = sessions.data.find(
+            (s) => s.status === "complete" || s.payment_status === "paid",
+          ) || sessions.data[0];
+
+          if (completedSession) {
+            const session = completedSession;
             const customFullName = session.custom_fields?.find(
               (field) => field.key === "full_name",
             )?.text?.value;
