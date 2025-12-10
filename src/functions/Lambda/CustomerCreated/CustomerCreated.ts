@@ -22,6 +22,8 @@ export const customerCreated =
       event: JSON.stringify(event, null, 2),
     });
 
+    console.log(JSON.stringify(event), 'eventeventevent');
+
     try {
       const stripeEvent = event.detail;
 
