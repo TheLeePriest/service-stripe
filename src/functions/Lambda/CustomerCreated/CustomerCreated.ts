@@ -63,9 +63,17 @@ export const customerCreated =
         {}) as Record<string, string | undefined>;
       const customerName =
         customer.name ||
-        customerMetadata.customer_name ||
-        customerEmail ||
-        "CDK Insights User";
+        customerMetadata.customer_name;
+
+      // If we don't have any name here, this is likely a trial customer without billing name.
+      // SessionCompleted will emit a CustomerCreated event with the full_name custom field.
+      if (!customerName) {
+        logger.info("Customer name missing on customer.created; deferring to session.completed", {
+          customerId: customer.id,
+          customerEmail: customer.email,
+        });
+        return;
+      }
 
       logger.info("Processing customer creation", {
         customerId,
