@@ -65,15 +65,9 @@ export const customerCreated =
         customer.name ||
         customerMetadata.customer_name;
 
-      // If we don't have any name here, this is likely a trial customer without billing name.
-      // SessionCompleted will emit a CustomerCreated event with the full_name custom field.
-      if (!customerName) {
-        logger.info("Customer name missing on customer.created; deferring to session.completed", {
-          customerId: customer.id,
-          customerEmail: customer.email,
-        });
-        return;
-      }
+      // If no name (common for trial signups), set empty string so downstream
+      // email renders "Hi there..." and later upgrades can supply the real name.
+      const resolvedName = customerName || "";
 
       logger.info("Processing customer creation", {
         customerId,
@@ -85,17 +79,17 @@ export const customerCreated =
       const eventDetail = {
         stripeCustomerId: customerId,
         customerEmail: customerEmail,
-        customerName: customerName,
+        customerName: resolvedName,
         createdAt: customer.created,
         customerData: {
           id: customerId,
           email: customerEmail,
-          name: customerName,
+          name: resolvedName,
         },
         // Additional fields for other services
         customerId,
         email: customerEmail,
-        name: customerName,
+        name: resolvedName,
         metadata: customer.metadata,
       };
 
