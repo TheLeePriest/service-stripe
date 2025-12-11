@@ -236,6 +236,7 @@ export const subscriptionCreated =
                 ...(teamContext && {
                   teamContext,
                 }),
+                metadata: subscription.metadata,
               }),
             },
           ],
