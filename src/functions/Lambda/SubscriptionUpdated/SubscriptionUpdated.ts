@@ -8,6 +8,7 @@ import { handleQuantityChange } from "./lib/handleQuantityChange/handleQuantityC
 import { determineSubscriptionState } from "./lib/determineSubscriptionState/determineSubscriptionState";
 import { handleRenewal } from "./lib/handleRenewal/handleRenewal";
 import type { Logger } from "../types/utils.types";
+import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 
 export const subscriptionUpdated =
   ({
@@ -40,6 +41,44 @@ export const subscriptionUpdated =
 
     try {
       const state = determineSubscriptionState(event);
+
+      // Detect trial ending (time-based) and notify license service
+      const trialEnded =
+        event.previousAttributes?.status === "trialing" &&
+        event.status !== "trialing";
+
+      if (trialEnded) {
+        try {
+          await eventBridgeClient.send(
+            new PutEventsCommand({
+              Entries: [
+                {
+                  Source: "service.stripe",
+                  DetailType: "TrialExpired",
+                  EventBusName: eventBusName,
+                  Detail: JSON.stringify({
+                    stripeSubscriptionId,
+                    customer: event.customer,
+                    trialEnd: event.trialEnd || event.cancel_at || event.createdAt,
+                    expirationReason: "time_limit",
+                  }),
+                },
+              ],
+            }),
+          );
+
+          logger.info("Emitted TrialExpired due to Stripe trial end", {
+            subscriptionId: stripeSubscriptionId,
+            customer: event.customer,
+            trialEnd: event.trialEnd,
+          });
+        } catch (emitError) {
+          logger.warn("Failed to emit TrialExpired on trial end", {
+            subscriptionId: stripeSubscriptionId,
+            error: emitError instanceof Error ? emitError.message : String(emitError),
+          });
+        }
+      }
 
       logger.info("Determined subscription state", {
         subscriptionId: stripeSubscriptionId,

@@ -10,6 +10,7 @@ import type { SubscriptionUpdatedEvent } from "../SubscriptionUpdated/Subscripti
 import type { SubscriptionDeletedEvent } from "../SubscriptionDeleted/SubscriptionDeleted.types";
 import { subscriptionUpgraded } from "../SubscriptionUpgraded/SubscriptionUpgraded";
 import type { Stripe } from "stripe";
+import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 
 export const subscriptionEventConductor =
   ({
@@ -37,6 +38,39 @@ export const subscriptionEventConductor =
     });
 
     switch (stripeEvent.type) {
+      case "customer.subscription.paused": {
+        const pausedAt = subscription.pause_collection?.behavior
+          ? stripeEvent.created
+          : stripeEvent.created;
+
+        await eventBridgeClient.send(
+          new PutEventsCommand({
+            Entries: [
+              {
+                Source: "service.stripe",
+                DetailType: "SubscriptionPaused",
+                EventBusName: eventBusName,
+                Detail: JSON.stringify({
+                  id: subscription.id,
+                  status: subscription.status,
+                  customer: subscription.customer,
+                  pausedAt,
+                  trialStart: subscription.trial_start,
+                  trialEnd: subscription.trial_end,
+                  metadata: subscription.metadata || {},
+                }),
+              },
+            ],
+          }),
+        );
+
+        logger.info("Emitted SubscriptionPaused event", {
+          subscriptionId: subscription.id,
+          customer: subscription.customer,
+        });
+        break;
+      }
+
       case "customer.subscription.created": {
         // Check if this is an upgrade based on metadata
         const isUpgrade = subscription.metadata?.is_upgrade === "true";
