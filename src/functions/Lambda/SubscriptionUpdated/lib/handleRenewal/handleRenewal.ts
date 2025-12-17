@@ -69,6 +69,11 @@ export const handleRenewal = async ({
                 expiresAt: item.current_period_end,
                 productId: item.price.product,
                 priceId: item.price.id,
+                // Include price metadata to identify metered items for usage reporting
+                metadata: {
+                  ...(item.price.metadata || {}),
+                  ...(item.price.recurring?.usage_type === 'metered' ? { metered: 'true', usage_type: 'metered' } : {}),
+                },
               })),
             }),
           },
