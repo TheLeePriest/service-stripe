@@ -21,7 +21,7 @@ export interface SubscriptionPauseRequestedDependencies {
       }>;
       update: (
         id: string,
-        params: { pause_collection: { behavior: "void" | "mark_uncollectible" | "keep_as_draft" } },
+        params: { cancel_at_period_end: boolean },
       ) => Promise<unknown>;
     };
   };

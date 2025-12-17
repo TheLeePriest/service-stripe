@@ -30,7 +30,7 @@ export const subscriptionPauseRequested =
 
     const stripeSubscriptionId = validated.stripeSubscriptionId;
 
-    logger.info("Processing SubscriptionPauseRequested", {
+    logger.info("Processing SubscriptionPauseRequested (cancelling trial)", {
       ...context,
       stripeSubscriptionId,
       reason: validated.reason,
@@ -38,9 +38,9 @@ export const subscriptionPauseRequested =
 
     const subscription = await stripeClient.subscriptions.retrieve(stripeSubscriptionId);
 
-    // Do not pause if it's already not trialing (e.g. upgraded) or already paused.
-    if (subscription.pause_collection) {
-      logger.info("Subscription already paused; skipping", {
+    // Do not cancel if it's already cancelled or not trialing (e.g. upgraded)
+    if (subscription.cancel_at_period_end) {
+      logger.info("Subscription already set to cancel at period end; skipping", {
         ...context,
         stripeSubscriptionId,
       });
@@ -48,7 +48,7 @@ export const subscriptionPauseRequested =
     }
 
     if (subscription.status !== "trialing") {
-      logger.info("Subscription not trialing; skipping pause", {
+      logger.info("Subscription not trialing; skipping cancellation", {
         ...context,
         stripeSubscriptionId,
         status: subscription.status,
@@ -57,18 +57,19 @@ export const subscriptionPauseRequested =
     }
 
     if (subscription.metadata?.is_upgrade === "true") {
-      logger.info("Subscription marked as upgrade; skipping pause", {
+      logger.info("Subscription marked as upgrade; skipping cancellation", {
         ...context,
         stripeSubscriptionId,
       });
       return;
     }
 
+    // Cancel the subscription at period end (since we can't pause metered subscriptions)
     await stripeClient.subscriptions.update(stripeSubscriptionId, {
-      pause_collection: { behavior: "void" },
+      cancel_at_period_end: true,
     });
 
-    logger.success("Paused Stripe subscription", {
+    logger.success("Cancelled Stripe subscription at period end", {
       ...context,
       stripeSubscriptionId,
     });
