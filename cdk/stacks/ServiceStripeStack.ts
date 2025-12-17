@@ -608,6 +608,62 @@ export class ServiceStripeStack extends Stack {
     targetEventBus.grantPutEventsTo(customerCreatedLambda.tsLambdaFunction);
     idempotencyTable.grantReadWriteData(customerCreatedLambda.tsLambdaFunction);
 
+    // Subscription Pause Requested Lambda (from service-license usage cap)
+    const subscriptionPauseRequestedLambdaPath = path.join(
+      __dirname,
+      "../../src/functions/Lambda/SubscriptionPauseRequested/SubscriptionPauseRequested.handler.ts",
+    );
+
+    const subscriptionPauseRequestedLogGroup = new LogGroup(
+      this,
+      `${serviceName}-subscription-pause-requested-log-group-${stage}`,
+      {
+        logGroupName: `/aws/lambda/${serviceName}-subscription-pause-requested-${stage}`,
+        retention: 7,
+        removalPolicy: RemovalPolicy.DESTROY,
+      },
+    );
+
+    const subscriptionPauseRequestedLambda = new TSLambdaFunction(
+      this,
+      `${serviceName}-subscription-pause-requested-lambda-${stage}`,
+      {
+        serviceName,
+        stage,
+        handlerName: "subscriptionPauseRequestedHandler",
+        entryPath: subscriptionPauseRequestedLambdaPath,
+        tsConfigPath,
+        functionName: `${serviceName}-subscription-pause-requested-${stage}`,
+        customOptions: {
+          logGroup: subscriptionPauseRequestedLogGroup,
+          timeout: Duration.seconds(30),
+          memorySize: 256,
+          environment: {
+            STRIPE_SECRET_KEY,
+            STAGE: stage,
+          },
+        },
+      },
+    );
+
+    // Listen on the target bus for pause requests from service-license
+    const subscriptionPauseRequestedRule = new Rule(
+      this,
+      `${serviceName}-subscription-pause-requested-rule-${stage}`,
+      {
+        eventBus: targetEventBus,
+        ruleName: `${serviceName}-subscription-pause-requested-rule-${stage}`,
+        eventPattern: {
+          source: ["service.license"],
+          detailType: ["SubscriptionPauseRequested"],
+        },
+      },
+    );
+
+    subscriptionPauseRequestedRule.addTarget(
+      new LambdaFunction(subscriptionPauseRequestedLambda.tsLambdaFunction),
+    );
+
     // EventBridge Rules for new handlers
     const invoiceCreatedRule = new Rule(
       this,

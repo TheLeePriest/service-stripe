@@ -25,11 +25,11 @@ export const subscriptionEventConductor =
     idempotencyTableName,
   }: SubscriptionEventConductorDependencies) =>
   async (
-    event: EventBridgeEvent<string, Stripe.CustomerSubscriptionCreatedEvent | Stripe.CustomerSubscriptionUpdatedEvent | Stripe.CustomerSubscriptionDeletedEvent>,
+    event: EventBridgeEvent<string, Stripe.Event>,
   ) => {
     console.log(event, "event");
     const stripeEvent = event.detail;
-    const subscription = stripeEvent.data.object;
+    const subscription = stripeEvent.data.object as Stripe.Subscription;
 
     logger.info("Processing subscription event", {
       eventType: stripeEvent.type,
@@ -39,9 +39,7 @@ export const subscriptionEventConductor =
 
     switch (stripeEvent.type) {
       case "customer.subscription.paused": {
-        const pausedAt = subscription.pause_collection?.behavior
-          ? stripeEvent.created
-          : stripeEvent.created;
+        const pausedAt = stripeEvent.created;
 
         await eventBridgeClient.send(
           new PutEventsCommand({
@@ -51,9 +49,9 @@ export const subscriptionEventConductor =
                 DetailType: "SubscriptionPaused",
                 EventBusName: eventBusName,
                 Detail: JSON.stringify({
-                  id: subscription.id,
+                  stripeSubscriptionId: subscription.id,
                   status: subscription.status,
-                  customer: subscription.customer,
+                  stripeCustomerId: subscription.customer,
                   pausedAt,
                   trialStart: subscription.trial_start,
                   trialEnd: subscription.trial_end,
@@ -65,6 +63,37 @@ export const subscriptionEventConductor =
         );
 
         logger.info("Emitted SubscriptionPaused event", {
+          subscriptionId: subscription.id,
+          customer: subscription.customer,
+        });
+        break;
+      }
+
+      case "customer.subscription.resumed": {
+        const resumedAt = stripeEvent.created;
+
+        await eventBridgeClient.send(
+          new PutEventsCommand({
+            Entries: [
+              {
+                Source: "service.stripe",
+                DetailType: "SubscriptionResumed",
+                EventBusName: eventBusName,
+                Detail: JSON.stringify({
+                  stripeSubscriptionId: subscription.id,
+                  status: subscription.status,
+                  stripeCustomerId: subscription.customer,
+                  resumedAt,
+                  trialStart: subscription.trial_start,
+                  trialEnd: subscription.trial_end,
+                  metadata: subscription.metadata || {},
+                }),
+              },
+            ],
+          }),
+        );
+
+        logger.info("Emitted SubscriptionResumed event", {
           subscriptionId: subscription.id,
           customer: subscription.customer,
         });
