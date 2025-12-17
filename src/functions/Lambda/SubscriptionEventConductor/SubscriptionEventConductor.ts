@@ -38,6 +38,35 @@ export const subscriptionEventConductor =
     });
 
     switch (stripeEvent.type) {
+      case "customer.subscription.trial_will_end": {
+        await eventBridgeClient.send(
+          new PutEventsCommand({
+            Entries: [
+              {
+                Source: "service.stripe",
+                DetailType: "TrialWillEnd",
+                EventBusName: eventBusName,
+                Detail: JSON.stringify({
+                  stripeSubscriptionId: subscription.id,
+                  stripeCustomerId: subscription.customer,
+                  trialEnd: subscription.trial_end,
+                  status: subscription.status,
+                  createdAt: stripeEvent.created,
+                  metadata: subscription.metadata || {},
+                }),
+              },
+            ],
+          }),
+        );
+
+        logger.info("Emitted TrialWillEnd event", {
+          subscriptionId: subscription.id,
+          customer: subscription.customer,
+          trialEnd: subscription.trial_end,
+        });
+        break;
+      }
+
       case "customer.subscription.paused": {
         const pausedAt = stripeEvent.created;
 
