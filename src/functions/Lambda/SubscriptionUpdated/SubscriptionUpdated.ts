@@ -202,28 +202,30 @@ export const subscriptionUpdated =
                 }
 
                 // Update subscription to end trial and upgrade
+                // Always explicitly end the trial, even if we're updating items
+                // This ensures the trial ends even if the price ID is the same
                 const updateParams: Stripe.SubscriptionUpdateParams = {
                   cancel_at_period_end: false,
+                  trial_end: 'now', // Always explicitly end the trial
                   metadata: {
                     ...currentSubscription.metadata,
                     auto_upgrade_on_payment_method: 'false', // Clear the flag
                     upgraded_at: new Date().toISOString(),
                     upgrade_type: 'trial_to_paid',
                     is_upgrade: 'true',
+                    // Set originalTrialSubscriptionId for SubscriptionUpgraded handler
+                    original_trial_subscription_id: stripeSubscriptionId,
                   },
                 };
 
                 // Add items update if we have price changes
                 if (itemsUpdate.length > 0) {
                   updateParams.items = itemsUpdate;
-                  // Stripe automatically ends trial when we update subscription items
-                  logger.info("Updating subscription with price changes", {
+                  logger.info("Updating subscription with price changes and ending trial", {
                     subscriptionId: stripeSubscriptionId,
                     itemsUpdateCount: itemsUpdate.length,
                   });
                 } else {
-                  // If no price changes, explicitly end the trial
-                  updateParams.trial_end = 'now';
                   logger.info("Ending trial immediately (no price changes)", {
                     subscriptionId: stripeSubscriptionId,
                   });
