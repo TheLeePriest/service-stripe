@@ -134,40 +134,38 @@ export const subscriptionUpdated =
 
           // Check if this is a trial subscription that should be upgraded after payment method was added
           // This handles the case where payment method is added via Customer Portal (which doesn't trigger payment_method.attached)
-          // We need to check if default_payment_method changed from null to a payment method ID
-          const previousPaymentMethod = event.previousAttributes?.default_payment_method;
-          const currentPaymentMethod = event.items?.data?.[0]?.subscription?.default_payment_method;
-          
-          // Retrieve subscription to get current payment method (since it's not in the event structure)
-          const subscriptionForCheck = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-          const hasPaymentMethodNow = !!subscriptionForCheck.default_payment_method;
-          const hadPaymentMethodBefore = previousPaymentMethod !== null && previousPaymentMethod !== undefined;
-          const paymentMethodWasAdded = !hadPaymentMethodBefore && hasPaymentMethodNow;
-          
-          logger.info("Checking payment method status for upgrade", {
-            subscriptionId: stripeSubscriptionId,
-            status,
-            previousPaymentMethod,
-            currentPaymentMethod: subscriptionForCheck.default_payment_method,
-            hasPaymentMethodNow,
-            hadPaymentMethodBefore,
-            paymentMethodWasAdded,
-            hasAutoUpgradeFlag: subscriptionForCheck.metadata?.auto_upgrade_on_payment_method === 'true',
-          });
-
+          // Only check for payment method upgrades if this is a trialing subscription
           if (
             status === 'trialing' &&
-            paymentMethodWasAdded &&
-            event.trialEnd
+            event.trialEnd &&
+            event.previousAttributes?.default_payment_method === null
           ) {
-            logger.info("Checking if trial subscription should be auto-upgraded", {
+            // Retrieve subscription to get current payment method (since it's not in the event structure)
+            const subscriptionForCheck = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+            const hasPaymentMethodNow = !!subscriptionForCheck.default_payment_method;
+            const hadPaymentMethodBefore = event.previousAttributes?.default_payment_method !== null && event.previousAttributes?.default_payment_method !== undefined;
+            const paymentMethodWasAdded = !hadPaymentMethodBefore && hasPaymentMethodNow;
+            
+            logger.info("Checking payment method status for upgrade", {
               subscriptionId: stripeSubscriptionId,
               status,
+              previousPaymentMethod: event.previousAttributes?.default_payment_method,
+              currentPaymentMethod: subscriptionForCheck.default_payment_method,
+              hasPaymentMethodNow,
+              hadPaymentMethodBefore,
               paymentMethodWasAdded,
+              hasAutoUpgradeFlag: subscriptionForCheck.metadata?.auto_upgrade_on_payment_method === 'true',
             });
 
-            // Use the subscription we already retrieved
-            try {
+            if (paymentMethodWasAdded) {
+              logger.info("Checking if trial subscription should be auto-upgraded", {
+                subscriptionId: stripeSubscriptionId,
+                status,
+                paymentMethodWasAdded,
+              });
+
+              // Use the subscription we already retrieved
+              try {
               if (
                 subscriptionForCheck.metadata?.auto_upgrade_on_payment_method === 'true' &&
                 subscriptionForCheck.default_payment_method &&
@@ -263,7 +261,7 @@ export const subscriptionUpdated =
 
                 logger.info("Successfully upgraded trial subscription", {
                   subscriptionId: stripeSubscriptionId,
-                  oldStatus: currentSubscription.status,
+                  oldStatus: subscriptionForCheck.status,
                   newStatus: updated.status,
                   itemsCount: updated.items.data.length,
                   trialEnd: updated.trial_end,
@@ -272,9 +270,9 @@ export const subscriptionUpdated =
               } else {
                 logger.debug("Subscription does not meet auto-upgrade criteria", {
                   subscriptionId: stripeSubscriptionId,
-                  hasAutoUpgradeFlag: currentSubscription.metadata?.auto_upgrade_on_payment_method === 'true',
-                  hasPaymentMethod: !!currentSubscription.default_payment_method,
-                  status: currentSubscription.status,
+                  hasAutoUpgradeFlag: subscriptionForCheck.metadata?.auto_upgrade_on_payment_method === 'true',
+                  hasPaymentMethod: !!subscriptionForCheck.default_payment_method,
+                  status: subscriptionForCheck.status,
                 });
               }
             } catch (upgradeError) {
@@ -283,6 +281,7 @@ export const subscriptionUpdated =
                 error: upgradeError instanceof Error ? upgradeError.message : String(upgradeError),
               });
               // Don't throw - continue with normal OTHER_UPDATE processing
+              }
             }
           }
           break;
