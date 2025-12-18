@@ -22,14 +22,24 @@ export const sessionCompleted =
         "subscription",
         "subscription.items.data.price",
         "payment_intent",
-        "setup_intent",
         "custom_fields",
         "customer_details",
       ],
     });
 
-    // Handle setup mode sessions (for trial upgrades)
+    // Skip setup mode sessions - these are handled synchronously by the complete-upgrade API endpoint
+    // The subscription update will trigger customer.subscription.updated events which will sync DynamoDB
     if (session.mode === 'setup') {
+      logger.info("Skipping setup mode session - handled by complete-upgrade API endpoint", {
+        sessionId,
+        customerId: session.customer,
+      });
+      return;
+    }
+
+    // Legacy setup mode handling (kept as fallback, but should not be reached)
+    // This code path is deprecated in favor of synchronous API handling
+    if (false && session.mode === 'setup') {
       logger.info("Processing setup mode checkout session", {
         sessionId,
         customerId: session.customer,
