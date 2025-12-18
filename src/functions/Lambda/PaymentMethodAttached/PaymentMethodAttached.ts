@@ -124,10 +124,21 @@ export const paymentMethodAttached =
       logger.info("Found trialing subscriptions", {
         customerId: customer,
         count: trialingSubscriptions.data.length,
+        subscriptionIds: trialingSubscriptions.data.map((s) => ({
+          id: s.id,
+          hasAutoUpgradeFlag: s.metadata?.auto_upgrade_on_payment_method === 'true',
+          metadata: s.metadata,
+        })),
       });
 
       // Upgrade any subscriptions marked for auto-upgrade
       for (const subscription of trialingSubscriptions.data) {
+        logger.debug("Checking subscription for auto-upgrade", {
+          subscriptionId: subscription.id,
+          hasAutoUpgradeFlag: subscription.metadata?.auto_upgrade_on_payment_method === 'true',
+          metadata: subscription.metadata,
+        });
+
         if (subscription.metadata?.auto_upgrade_on_payment_method === 'true') {
           logger.info("Upgrading trial subscription on payment method attachment", {
             subscriptionId: subscription.id,
@@ -192,10 +203,25 @@ export const paymentMethodAttached =
             if (itemsUpdate.length > 0) {
               updateParams.items = itemsUpdate;
               // Stripe automatically ends trial when we update subscription items
+              logger.info("Updating subscription with price changes", {
+                subscriptionId: subscription.id,
+                itemsUpdateCount: itemsUpdate.length,
+              });
             } else {
               // If no price changes, explicitly end the trial
               updateParams.trial_end = 'now';
+              logger.info("Ending trial immediately (no price changes)", {
+                subscriptionId: subscription.id,
+              });
             }
+
+            logger.info("Calling Stripe API to upgrade subscription", {
+              subscriptionId: subscription.id,
+              updateParams: {
+                ...updateParams,
+                items: itemsUpdate.length > 0 ? `[${itemsUpdate.length} items]` : undefined,
+              },
+            });
 
             const updated = await stripe.subscriptions.update(
               subscription.id,
@@ -204,8 +230,11 @@ export const paymentMethodAttached =
 
             logger.info("Successfully upgraded trial subscription", {
               subscriptionId: subscription.id,
-              status: updated.status,
+              oldStatus: subscription.status,
+              newStatus: updated.status,
               itemsCount: updated.items.data.length,
+              trialEnd: updated.trial_end,
+              hasPaymentMethod: !!updated.default_payment_method,
             });
           } catch (upgradeError) {
             logger.error("Failed to upgrade trial subscription", {
