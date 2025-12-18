@@ -568,6 +568,49 @@ export class ServiceStripeStack extends Stack {
     targetEventBus.grantPutEventsTo(paymentMethodAttachedLambda.tsLambdaFunction);
     idempotencyTable.grantReadWriteData(paymentMethodAttachedLambda.tsLambdaFunction);
 
+    // Setup Intent Succeeded Lambda
+    const setupIntentSucceededLambdaPath = path.join(
+      __dirname,
+      "../../src/functions/Lambda/SetupIntentSucceeded/SetupIntentSucceeded.handler.ts",
+    );
+
+    const setupIntentSucceededLogGroup = new LogGroup(
+      this,
+      `${serviceName}-setup-intent-succeeded-log-group-${stage}`,
+      {
+        logGroupName: `/aws/lambda/${serviceName}-setup-intent-succeeded-${stage}`,
+        retention: 7,
+        removalPolicy: RemovalPolicy.DESTROY,
+      },
+    );
+
+    const setupIntentSucceededLambda = new TSLambdaFunction(
+      this,
+      `${serviceName}-setup-intent-succeeded-lambda-${stage}`,
+      {
+        serviceName,
+        stage,
+        handlerName: "setupIntentSucceededHandler",
+        entryPath: setupIntentSucceededLambdaPath,
+        tsConfigPath,
+        functionName: `${serviceName}-setup-intent-succeeded-${stage}`,
+        customOptions: {
+          logGroup: setupIntentSucceededLogGroup,
+          timeout: Duration.seconds(30),
+          memorySize: 256,
+          environment: {
+            STRIPE_SECRET_KEY,
+            STAGE: stage,
+            TARGET_EVENT_BUS_NAME: targetEventBusName,
+            IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
+          },
+        },
+      },
+    );
+
+    targetEventBus.grantPutEventsTo(setupIntentSucceededLambda.tsLambdaFunction);
+    idempotencyTable.grantReadWriteData(setupIntentSucceededLambda.tsLambdaFunction);
+
     // Customer Created Lambda
     const customerCreatedLambdaPath = path.join(
       __dirname,
@@ -751,6 +794,24 @@ export class ServiceStripeStack extends Stack {
 
     customerCreatedRule.addTarget(
       new LambdaFunction(customerCreatedLambda.tsLambdaFunction),
+    );
+
+    // Setup Intent Succeeded Rule
+    const setupIntentSucceededRule = new Rule(
+      this,
+      `${serviceName}-setup-intent-succeeded-rule-${stage}`,
+      {
+        eventBus: stripeEventBus,
+        ruleName: `${serviceName}-setup-intent-succeeded-rule-${stage}`,
+        eventPattern: {
+          source: [`aws.partner/stripe.com/${STRIPE_EVENT_BUS_ID}`],
+          detailType: ["setup_intent.succeeded"],
+        },
+      },
+    );
+
+    setupIntentSucceededRule.addTarget(
+      new LambdaFunction(setupIntentSucceededLambda.tsLambdaFunction),
     );
   }
 }
