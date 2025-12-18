@@ -294,7 +294,7 @@ export const subscriptionEventConductor =
               trial_end: subscription.trial_end,
             }),
             created: subscription.created,
-            metadata: subscription.metadata || {},
+            metadata: upgradeMetadata,
           };
 
           logger.info("Sending subscription upgraded event (updated)", {
