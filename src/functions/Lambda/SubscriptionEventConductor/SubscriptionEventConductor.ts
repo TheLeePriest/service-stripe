@@ -229,7 +229,41 @@ export const subscriptionEventConductor =
       case "customer.subscription.updated": {
         // Handle in-place upgrade updates if metadata signals an upgrade
         const isUpgradeUpdate = subscription.metadata?.is_upgrade === "true";
-        if (isUpgradeUpdate) {
+        
+        // Also detect trial-to-active transitions as upgrades (fallback if metadata missing)
+        const wasTrialing = stripeEvent.data.previous_attributes?.status === "trialing";
+        const isNowActive = subscription.status === "active";
+        const trialEnded = 
+          wasTrialing && 
+          isNowActive && 
+          subscription.trial_end && 
+          stripeEvent.data.previous_attributes?.trial_end &&
+          subscription.trial_end < stripeEvent.data.previous_attributes.trial_end;
+        
+        logger.info("Checking for upgrade in subscription update", {
+          subscriptionId: subscription.id,
+          hasIsUpgradeMetadata: subscription.metadata?.is_upgrade === "true",
+          metadata: subscription.metadata || {},
+          wasTrialing,
+          isNowActive,
+          trialEnded,
+          previousStatus: stripeEvent.data.previous_attributes?.status,
+          currentStatus: subscription.status,
+          previousTrialEnd: stripeEvent.data.previous_attributes?.trial_end,
+          currentTrialEnd: subscription.trial_end,
+        });
+
+        if (isUpgradeUpdate || (wasTrialing && isNowActive && trialEnded)) {
+          // Ensure metadata includes upgrade info if we detected it via status change
+          const upgradeMetadata = isUpgradeUpdate 
+            ? subscription.metadata || {}
+            : {
+                ...subscription.metadata,
+                is_upgrade: "true",
+                upgrade_type: "trial_to_paid",
+                upgraded_at: new Date().toISOString(),
+                original_trial_subscription_id: subscription.id,
+              };
           const upgradeEvent = {
             items: {
               data: subscription.items.data.map((item) => {
