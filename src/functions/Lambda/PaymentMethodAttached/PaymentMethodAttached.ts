@@ -114,6 +114,110 @@ export const paymentMethodAttached =
         type,
       });
 
+      // Check for trialing subscriptions that should be auto-upgraded
+      const trialingSubscriptions = await stripe.subscriptions.list({
+        customer: customer,
+        status: 'trialing',
+        limit: 100,
+      });
+
+      logger.info("Found trialing subscriptions", {
+        customerId: customer,
+        count: trialingSubscriptions.data.length,
+      });
+
+      // Upgrade any subscriptions marked for auto-upgrade
+      for (const subscription of trialingSubscriptions.data) {
+        if (subscription.metadata?.auto_upgrade_on_payment_method === 'true') {
+          logger.info("Upgrading trial subscription on payment method attachment", {
+            subscriptionId: subscription.id,
+            customerId: customer,
+            targetPriceId: subscription.metadata?.target_price_id,
+          });
+
+          try {
+            // Get subscription items to find base and metered prices
+            const subscriptionItems = subscription.items.data;
+            const baseItem = subscriptionItems.find(
+              (item) => item.price.recurring?.usage_type !== 'metered',
+            );
+            const meteredItem = subscriptionItems.find(
+              (item) => item.price.recurring?.usage_type === 'metered',
+            );
+
+            // Get target price if specified in metadata, otherwise keep existing base price
+            const targetPriceId = subscription.metadata?.target_price_id;
+            const itemsUpdate: Stripe.SubscriptionUpdateParams.Item[] = [];
+
+            if (targetPriceId && baseItem) {
+              // Update base price if target price is specified
+              itemsUpdate.push({
+                id: baseItem.id,
+                price: targetPriceId,
+                quantity: 1,
+              });
+              logger.info("Updating base price for upgrade", {
+                subscriptionId: subscription.id,
+                oldPriceId: baseItem.price.id,
+                newPriceId: targetPriceId,
+              });
+            }
+
+            // Ensure metered price exists (should already be on trial subscriptions)
+            if (meteredItem) {
+              logger.info("Metered price already exists on subscription", {
+                subscriptionId: subscription.id,
+                meteredPriceId: meteredItem.price.id,
+              });
+            } else {
+              logger.warn("No metered price found on trial subscription", {
+                subscriptionId: subscription.id,
+              });
+            }
+
+            // Update subscription to end trial and upgrade
+            // If we have items to update, include them. Otherwise, just update metadata and end trial
+            const updateParams: Stripe.SubscriptionUpdateParams = {
+              cancel_at_period_end: false,
+              metadata: {
+                ...subscription.metadata,
+                auto_upgrade_on_payment_method: 'false', // Clear the flag
+                upgraded_at: new Date().toISOString(),
+                upgrade_type: 'trial_to_paid',
+                is_upgrade: 'true',
+              },
+            };
+
+            // Add items update if we have price changes
+            if (itemsUpdate.length > 0) {
+              updateParams.items = itemsUpdate;
+              // Stripe automatically ends trial when we update subscription items
+            } else {
+              // If no price changes, explicitly end the trial
+              updateParams.trial_end = 'now';
+            }
+
+            const updated = await stripe.subscriptions.update(
+              subscription.id,
+              updateParams,
+            );
+
+            logger.info("Successfully upgraded trial subscription", {
+              subscriptionId: subscription.id,
+              status: updated.status,
+              itemsCount: updated.items.data.length,
+            });
+          } catch (upgradeError) {
+            logger.error("Failed to upgrade trial subscription", {
+              subscriptionId: subscription.id,
+              customerId: customer,
+              error: upgradeError instanceof Error ? upgradeError.message : String(upgradeError),
+            });
+            // Continue processing other subscriptions even if one fails
+          }
+        }
+      }
+
       // Send event to EventBridge
       await eventBridgeClient.send(
         new PutEventsCommand({
