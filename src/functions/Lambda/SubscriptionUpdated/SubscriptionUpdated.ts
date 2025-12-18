@@ -134,36 +134,53 @@ export const subscriptionUpdated =
 
           // Check if this is a trial subscription that should be upgraded after payment method was added
           // This handles the case where payment method is added via Customer Portal (which doesn't trigger payment_method.attached)
+          // We need to check if default_payment_method changed from null to a payment method ID
+          const previousPaymentMethod = event.previousAttributes?.default_payment_method;
+          const currentPaymentMethod = event.items?.data?.[0]?.subscription?.default_payment_method;
+          
+          // Retrieve subscription to get current payment method (since it's not in the event structure)
+          const subscriptionForCheck = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+          const hasPaymentMethodNow = !!subscriptionForCheck.default_payment_method;
+          const hadPaymentMethodBefore = previousPaymentMethod !== null && previousPaymentMethod !== undefined;
+          const paymentMethodWasAdded = !hadPaymentMethodBefore && hasPaymentMethodNow;
+          
+          logger.info("Checking payment method status for upgrade", {
+            subscriptionId: stripeSubscriptionId,
+            status,
+            previousPaymentMethod,
+            currentPaymentMethod: subscriptionForCheck.default_payment_method,
+            hasPaymentMethodNow,
+            hadPaymentMethodBefore,
+            paymentMethodWasAdded,
+            hasAutoUpgradeFlag: subscriptionForCheck.metadata?.auto_upgrade_on_payment_method === 'true',
+          });
+
           if (
             status === 'trialing' &&
-            event.previousAttributes?.default_payment_method === null &&
-            // We need to check if the subscription has the auto-upgrade flag
-            // Since we don't have direct access to metadata in the event, we'll check via Stripe API
+            paymentMethodWasAdded &&
             event.trialEnd
           ) {
             logger.info("Checking if trial subscription should be auto-upgraded", {
               subscriptionId: stripeSubscriptionId,
               status,
-              hadPaymentMethod: event.previousAttributes?.default_payment_method !== null,
+              paymentMethodWasAdded,
             });
 
-            // Retrieve the subscription to check metadata and current payment method status
+            // Use the subscription we already retrieved
             try {
-              const currentSubscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-              
               if (
-                currentSubscription.metadata?.auto_upgrade_on_payment_method === 'true' &&
-                currentSubscription.default_payment_method &&
-                currentSubscription.status === 'trialing'
+                subscriptionForCheck.metadata?.auto_upgrade_on_payment_method === 'true' &&
+                subscriptionForCheck.default_payment_method &&
+                subscriptionForCheck.status === 'trialing'
               ) {
                 logger.info("Auto-upgrading trial subscription after payment method added via portal", {
                   subscriptionId: stripeSubscriptionId,
-                  customerId: currentSubscription.customer,
-                  targetPriceId: currentSubscription.metadata?.target_price_id,
+                  customerId: subscriptionForCheck.customer,
+                  targetPriceId: subscriptionForCheck.metadata?.target_price_id,
                 });
 
                 // Get subscription items to find base and metered prices
-                const subscriptionItems = currentSubscription.items.data;
+                const subscriptionItems = subscriptionForCheck.items.data;
                 const baseItem = subscriptionItems.find(
                   (item) => item.price.recurring?.usage_type !== 'metered',
                 );
@@ -172,7 +189,7 @@ export const subscriptionUpdated =
                 );
 
                 // Get target price if specified in metadata, otherwise keep existing base price
-                const targetPriceId = currentSubscription.metadata?.target_price_id;
+                const targetPriceId = subscriptionForCheck.metadata?.target_price_id;
                 const itemsUpdate: Stripe.SubscriptionUpdateParams.Item[] = [];
 
                 if (targetPriceId && baseItem) {
@@ -208,7 +225,7 @@ export const subscriptionUpdated =
                   cancel_at_period_end: false,
                   trial_end: 'now', // Always explicitly end the trial
                   metadata: {
-                    ...currentSubscription.metadata,
+                    ...subscriptionForCheck.metadata,
                     auto_upgrade_on_payment_method: 'false', // Clear the flag
                     upgraded_at: new Date().toISOString(),
                     upgrade_type: 'trial_to_paid',
