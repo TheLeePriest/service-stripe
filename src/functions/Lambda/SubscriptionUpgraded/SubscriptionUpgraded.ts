@@ -4,7 +4,6 @@ import type {
   SubscriptionUpgradedResult,
 } from "./SubscriptionUpgraded.types";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import type { Logger } from "../types/utils.types";
 
 export const subscriptionUpgraded =
   (dependencies: SubscriptionUpgradedDependencies) =>
