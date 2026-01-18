@@ -18,7 +18,7 @@ export const subscriptionCreated =
       idempotencyTableName,
       logger,
     } = dependencies;
-    console.log("subscription", subscription);
+
     logger.logStripeEvent(
       "customer.subscription.created",
       subscription as unknown as Record<string, unknown>,
@@ -209,7 +209,7 @@ export const subscriptionCreated =
           teamContext,
         });
       }
-      console.log(subscription, "subscription before event");
+
       // Send SubscriptionCreated event
       await eventBridgeClient.send(
         new PutEventsCommand({

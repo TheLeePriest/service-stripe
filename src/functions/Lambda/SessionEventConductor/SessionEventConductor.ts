@@ -13,7 +13,6 @@ export const sessionEventConductor =
     logger,
   }: SessionEventConductorDependencies) =>
   async (event: EventBridgeEvent<string, Stripe.CheckoutSessionCompletedEvent>) => {
-    console.log("event", JSON.stringify(event));
     logger.info("SessionEventConductor invoked", {
       eventId: event.id,
       source: event.source,

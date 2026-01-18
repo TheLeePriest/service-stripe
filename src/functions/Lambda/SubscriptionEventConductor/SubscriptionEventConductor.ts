@@ -27,7 +27,6 @@ export const subscriptionEventConductor =
   async (
     event: EventBridgeEvent<string, Stripe.Event>,
   ) => {
-    console.log(event, "event");
     const stripeEvent = event.detail;
     const subscription = stripeEvent.data.object as Stripe.Subscription;
 
