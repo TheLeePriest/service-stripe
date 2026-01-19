@@ -40,6 +40,11 @@ export const subscriptionUpgraded =
         };
       }
 
+      // Get customer details from Stripe for email notification
+      const customer = await stripe.customers.retrieve(subscription.customer);
+      const customerEmail = !('deleted' in customer) ? customer.email || "" : "";
+      const customerName = !('deleted' in customer) ? customer.name || "" : "";
+
       // Process subscription items for team detection
       const items = await Promise.all(
         subscription.items.data.map(async (item) => {
@@ -119,8 +124,8 @@ export const subscriptionUpgraded =
               Detail: JSON.stringify({
                 stripeSubscriptionId: subscription.id,
                 stripeCustomerId: subscription.customer,
-                customerEmail: "", // Will be populated by downstream services
-                customerName: "", // Will be populated by downstream services
+                customerEmail,
+                customerName,
                 items,
                 status: subscription.status,
                 createdAt: subscription.created,

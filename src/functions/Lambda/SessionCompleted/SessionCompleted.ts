@@ -71,6 +71,25 @@ export const sessionCompleted =
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ") || "";
 
+    // Update Stripe customer with name if we have one and it's not already set
+    if (fullName && !customer.name) {
+      try {
+        await stripe.customers.update(customer.id, {
+          name: fullName,
+        });
+        logger.info("Updated Stripe customer with name", {
+          customerId: customer.id,
+          name: fullName,
+        });
+      } catch (updateError) {
+        logger.warn("Failed to update Stripe customer name", {
+          customerId: customer.id,
+          error: updateError instanceof Error ? updateError.message : String(updateError),
+        });
+        // Don't fail the entire flow if name update fails
+      }
+    }
+
     // Generate idempotency key for customer creation
     const eventId = generateEventId("customer-created", customer.id);
     

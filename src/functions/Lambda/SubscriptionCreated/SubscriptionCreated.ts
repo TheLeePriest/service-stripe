@@ -62,7 +62,12 @@ export const subscriptionCreated =
       (subscription.metadata?.customer_email as string | undefined) ||
       (subscription.metadata?.email as string | undefined) ||
       "";
-    const customerName = customer.name || customerEmail || "";
+    // Don't fall back to email - let downstream handlers use email prefix if no name
+    // Check subscription metadata as fallback (may be set during checkout)
+    const customerName =
+      customer.name ||
+      (subscription.metadata?.customer_name as string | undefined) ||
+      "";
 
     if (!customerEmail) {
       logger.warn("Customer email missing on subscription.created", {
