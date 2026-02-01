@@ -126,7 +126,7 @@ export class ServiceStripeStack extends Stack {
         customOptions: {
           logGroup: sendUsageToStripeLogGroup,
           timeout: Duration.seconds(30),
-          memorySize: 256,
+          memorySize: 192, // Optimized: I/O bound (Stripe API + SQS)
           environment: {
             STRIPE_SECRET_KEY,
             STRIPE_ENTERPRISE_USAGE_PRICE_ID: StringParameter.fromStringParameterAttributes(
@@ -425,7 +425,7 @@ export class ServiceStripeStack extends Stack {
         customOptions: {
           logGroup: invoiceCreatedLogGroup,
           timeout: Duration.seconds(30),
-          memorySize: 256,
+          memorySize: 192, // Optimized: I/O bound (Stripe + EventBridge)
           environment: {
             STRIPE_SECRET_KEY,
             STAGE: stage,
@@ -468,7 +468,7 @@ export class ServiceStripeStack extends Stack {
         customOptions: {
           logGroup: invoicePaymentSucceededLogGroup,
           timeout: Duration.seconds(30),
-          memorySize: 256,
+          memorySize: 192, // Optimized: I/O bound (Stripe + EventBridge)
           environment: {
             STRIPE_SECRET_KEY,
             STAGE: stage,
@@ -511,7 +511,7 @@ export class ServiceStripeStack extends Stack {
         customOptions: {
           logGroup: invoicePaymentFailedLogGroup,
           timeout: Duration.seconds(30),
-          memorySize: 256,
+          memorySize: 192, // Optimized: I/O bound (Stripe + EventBridge)
           environment: {
             STRIPE_SECRET_KEY,
             STAGE: stage,
@@ -554,7 +554,7 @@ export class ServiceStripeStack extends Stack {
         customOptions: {
           logGroup: paymentMethodAttachedLogGroup,
           timeout: Duration.seconds(30),
-          memorySize: 256,
+          memorySize: 192, // Optimized: I/O bound (Stripe + EventBridge)
           environment: {
             STRIPE_SECRET_KEY,
             STAGE: stage,
@@ -597,7 +597,7 @@ export class ServiceStripeStack extends Stack {
         customOptions: {
           logGroup: setupIntentSucceededLogGroup,
           timeout: Duration.seconds(30),
-          memorySize: 256,
+          memorySize: 192, // Optimized: I/O bound (Stripe + EventBridge)
           environment: {
             STRIPE_SECRET_KEY,
             STAGE: stage,
@@ -640,7 +640,7 @@ export class ServiceStripeStack extends Stack {
         customOptions: {
           logGroup: customerCreatedLogGroup,
           timeout: Duration.seconds(30),
-          memorySize: 256,
+          memorySize: 192, // Optimized: I/O bound (Stripe + EventBridge)
           environment: {
             STRIPE_SECRET_KEY,
             STAGE: stage,
@@ -683,7 +683,7 @@ export class ServiceStripeStack extends Stack {
         customOptions: {
           logGroup: subscriptionPauseRequestedLogGroup,
           timeout: Duration.seconds(30),
-          memorySize: 256,
+          memorySize: 192, // Optimized: I/O bound (Stripe API call only)
           environment: {
             STRIPE_SECRET_KEY,
             STAGE: stage,
