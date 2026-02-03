@@ -159,9 +159,50 @@ export const invoicePaymentFailed =
         }),
       );
 
-      logger.info("InvoicePaymentFailed event sent", { 
-        invoiceId: stripeInvoiceId 
+      logger.info("InvoicePaymentFailed event sent", {
+        invoiceId: stripeInvoiceId
       });
+
+      // Send email notification event
+      if (customerData.email) {
+        // Calculate retry date (Stripe typically retries after 3-5 days)
+        const retryDate = new Date((created + 3 * 24 * 60 * 60) * 1000).toLocaleDateString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+        });
+
+        // Determine failure reason from Stripe status
+        let failureReason = "Your payment could not be processed";
+        if (attempt_count && attempt_count > 1) {
+          failureReason = `Payment failed after ${attempt_count} attempts`;
+        }
+
+        await eventBridgeClient.send(
+          new PutEventsCommand({
+            Entries: [
+              {
+                Source: "service.stripe",
+                DetailType: "SendPaymentFailedEmail",
+                Detail: JSON.stringify({
+                  stripeCustomerId: customer,
+                  customerEmail: customerData.email,
+                  customerName: customerData.name || undefined,
+                  failureReason,
+                  retryDate,
+                  updatePaymentUrl: `https://cdkinsights.dev/account/billing?update_payment=true&email=${encodeURIComponent(customerData.email)}`,
+                }),
+                EventBusName: eventBusName,
+              },
+            ],
+          }),
+        );
+
+        logger.info("SendPaymentFailedEmail event sent", {
+          invoiceId: stripeInvoiceId,
+          customerEmail: customerData.email,
+        });
+      }
     } catch (error) {
       logger.error("Error processing invoice payment failure", {
         eventId: event.id,

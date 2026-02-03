@@ -71,6 +71,9 @@ export const sessionCompleted =
     const firstName = nameParts[0] || "";
     const lastName = nameParts.slice(1).join(" ") || "";
 
+    // Check if this is a beta tester (passed via session metadata)
+    const isBetaTester = (session.metadata as Record<string, unknown>)?.is_beta_tester === 'true';
+
     // Update Stripe customer with name if we have one and it's not already set
     if (fullName && !customer.name) {
       try {
@@ -87,6 +90,24 @@ export const sessionCompleted =
           error: updateError instanceof Error ? updateError.message : String(updateError),
         });
         // Don't fail the entire flow if name update fails
+      }
+    }
+
+    // Copy beta tester flag to subscription metadata for later reference
+    if (isBetaTester) {
+      try {
+        await stripe.subscriptions.update(subscription.id, {
+          metadata: { is_beta_tester: 'true' },
+        });
+        logger.info("Updated subscription with beta tester flag", {
+          subscriptionId: subscription.id,
+        });
+      } catch (updateError) {
+        logger.warn("Failed to update subscription with beta tester flag", {
+          subscriptionId: subscription.id,
+          error: updateError instanceof Error ? updateError.message : String(updateError),
+        });
+        // Don't fail the entire flow if metadata update fails
       }
     }
 
@@ -159,6 +180,7 @@ export const sessionCompleted =
                 firstName: firstName,
                 lastName: lastName,
                 updatedAt: now,
+                isBetaTester: isBetaTester,
               }),
             },
           ],

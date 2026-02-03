@@ -813,5 +813,68 @@ export class ServiceStripeStack extends Stack {
     setupIntentSucceededRule.addTarget(
       new LambdaFunction(setupIntentSucceededLambda.tsLambdaFunction),
     );
+
+    // ============================================================================
+    // GDPR ACCOUNT DELETION - ARCHIVE STRIPE CUSTOMER
+    // Handles ArchiveStripeCustomer event from service-user
+    // ============================================================================
+
+    const archiveStripeCustomerLambdaPath = path.join(
+      __dirname,
+      "../../src/functions/Lambda/ArchiveStripeCustomer/ArchiveStripeCustomer.handler.ts",
+    );
+
+    const archiveStripeCustomerLogGroup = new LogGroup(
+      this,
+      `${serviceName}-archive-stripe-customer-log-group-${stage}`,
+      {
+        logGroupName: `/aws/lambda/${serviceName}-archive-stripe-customer-${stage}`,
+        retention: 7,
+        removalPolicy: RemovalPolicy.DESTROY,
+      },
+    );
+
+    const archiveStripeCustomerLambda = new TSLambdaFunction(
+      this,
+      `${serviceName}-archive-stripe-customer-lambda-${stage}`,
+      {
+        serviceName,
+        stage,
+        handlerName: "handler",
+        entryPath: archiveStripeCustomerLambdaPath,
+        tsConfigPath,
+        functionName: `${serviceName}-archive-stripe-customer-${stage}`,
+        customOptions: {
+          logGroup: archiveStripeCustomerLogGroup,
+          timeout: Duration.seconds(30),
+          memorySize: 192,
+          environment: {
+            STRIPE_SECRET_KEY,
+            STAGE: stage,
+            TARGET_EVENT_BUS_NAME: targetEventBusName,
+          },
+        },
+      },
+    );
+
+    targetEventBus.grantPutEventsTo(archiveStripeCustomerLambda.tsLambdaFunction);
+
+    // EventBridge rule for GDPR account deletion - Archive Stripe Customer
+    const archiveStripeCustomerRule = new Rule(
+      this,
+      `${serviceName}-archive-stripe-customer-rule-${stage}`,
+      {
+        eventBus: targetEventBus,
+        ruleName: `${serviceName}-archive-stripe-customer-rule-${stage}`,
+        eventPattern: {
+          source: ["service.user"],
+          detailType: ["ArchiveStripeCustomer"],
+        },
+      },
+    );
+
+    archiveStripeCustomerRule.addTarget(
+      new LambdaFunction(archiveStripeCustomerLambda.tsLambdaFunction),
+    );
   }
 }

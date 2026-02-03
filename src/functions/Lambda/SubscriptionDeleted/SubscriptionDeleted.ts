@@ -93,6 +93,47 @@ export const subscriptionDeleted =
         subscriptionId: stripeSubscriptionId,
         customerEmail: email,
       });
+
+      // Send email notification for subscription cancellation
+      if (email) {
+        // Format the access end date
+        const accessEndDate = ended_at
+          ? new Date(ended_at * 1000).toLocaleDateString('en-US', {
+              month: 'long',
+              day: 'numeric',
+              year: 'numeric',
+            })
+          : new Date().toLocaleDateString('en-US', {
+              month: 'long',
+              day: 'numeric',
+              year: 'numeric',
+            });
+
+        await eventBridgeClient.send(
+          new PutEventsCommand({
+            Entries: [
+              {
+                Source: "service.stripe",
+                DetailType: "SendSubscriptionCancelledEmail",
+                EventBusName: eventBusName,
+                Detail: JSON.stringify({
+                  stripeSubscriptionId,
+                  stripeCustomerId: customer,
+                  customerEmail: email,
+                  customerName: stripeCustomer.name || undefined,
+                  accessEndDate,
+                  reactivateUrl: `https://cdkinsights.dev/pricing?reactivate=true&email=${encodeURIComponent(email)}`,
+                }),
+              },
+            ],
+          }),
+        );
+
+        logger.info("SendSubscriptionCancelledEmail event sent", {
+          subscriptionId: stripeSubscriptionId,
+          customerEmail: email,
+        });
+      }
     } catch (error) {
       logger.error("Error processing subscription deletion", {
         subscriptionId: stripeSubscriptionId,

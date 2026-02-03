@@ -227,9 +227,75 @@ export const invoicePaymentSucceeded =
         }),
       );
 
-      logger.info("InvoicePaymentSucceeded event sent", { 
-        invoiceId: stripeInvoiceId 
+      logger.info("InvoicePaymentSucceeded event sent", {
+        invoiceId: stripeInvoiceId
       });
+
+      // Send email notification for subscription renewals
+      if (isRenewal && customerData.email && renewalData) {
+        // Get plan name from subscription if possible
+        let planName = "Pro";
+        if (subscription) {
+          try {
+            const stripeSubscription = await stripe.subscriptions.retrieve(subscription, {
+              expand: ['items.data.price.product'],
+            });
+            const item = stripeSubscription.items.data[0];
+            if (item?.price?.product && typeof item.price.product === 'object') {
+              planName = (item.price.product as Stripe.Product).name || "Pro";
+            }
+          } catch {
+            // Use default plan name if we can't fetch it
+          }
+        }
+
+        // Format amount with currency symbol
+        const currencySymbols: Record<string, string> = {
+          usd: "$",
+          eur: "€",
+          gbp: "£",
+        };
+        const currencySymbol = currencySymbols[currency.toLowerCase()] || currency.toUpperCase() + " ";
+        const formattedAmount = (amount_paid / 100).toFixed(2);
+
+        // Format next renewal date
+        const nextRenewalDate = renewalData.currentPeriodEnd
+          ? new Date(parseInt(renewalData.currentPeriodEnd) * 1000).toLocaleDateString('en-US', {
+              month: 'long',
+              day: 'numeric',
+              year: 'numeric',
+            })
+          : "your next billing cycle";
+
+        await eventBridgeClient.send(
+          new PutEventsCommand({
+            Entries: [
+              {
+                Source: "service.stripe",
+                DetailType: "SendSubscriptionRenewedEmail",
+                Detail: JSON.stringify({
+                  stripeSubscriptionId: subscription,
+                  stripeCustomerId: customer,
+                  customerEmail: customerData.email,
+                  customerName: customerData.name || undefined,
+                  planName,
+                  amount: formattedAmount,
+                  currency: currencySymbol,
+                  nextRenewalDate,
+                  dashboardUrl: `https://cdkinsights.dev/dashboard`,
+                }),
+                EventBusName: eventBusName,
+              },
+            ],
+          }),
+        );
+
+        logger.info("SendSubscriptionRenewedEmail event sent", {
+          invoiceId: stripeInvoiceId,
+          customerEmail: customerData.email,
+          isRenewal: true,
+        });
+      }
     } catch (error) {
       logger.error("Error processing invoice payment success", {
         eventId: event.id,
