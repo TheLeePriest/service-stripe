@@ -15,6 +15,12 @@ export type SubscriptionDeletedDependencies = {
     products: {
       retrieve: (id: string) => Promise<Stripe.Response<Stripe.Product>>;
     };
+    subscriptions: {
+      retrieve: (id: string) => Promise<Stripe.Response<Stripe.Subscription>>;
+    };
+    refunds: {
+      list: (params: { limit?: number; created?: { gte: number } }) => Promise<Stripe.Response<Stripe.ApiList<Stripe.Refund>>>;
+    };
   };
   eventBridgeClient: {
     send: (command: PutEventsCommand) => Promise<PutEventsCommandOutput>;
