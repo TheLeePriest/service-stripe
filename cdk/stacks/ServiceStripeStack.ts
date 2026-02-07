@@ -944,13 +944,7 @@ export class ServiceStripeStack extends Stack {
     // Wired to the centralised CDK Insights alerting SNS topic
     // ============================================================================
 
-    const alertingTopicArn = StringParameter.fromStringParameterAttributes(
-      this,
-      `${serviceName}-alerting-topic-arn-${stage}`,
-      {
-        parameterName: `/${stage}/cdkinsights/alerting/sns-topic-arn`,
-      },
-    ).stringValue;
+    const alertingTopicArn = `arn:aws:sns:${Stack.of(this).region}:${Stack.of(this).account}:cdk-insights-platform-alerting-${stage}`;
 
     const alertingTopic = Topic.fromTopicArn(
       this,
