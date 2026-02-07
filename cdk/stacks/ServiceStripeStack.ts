@@ -180,6 +180,7 @@ export class ServiceStripeStack extends Stack {
       billingMode: BillingMode.PAY_PER_REQUEST,
       sortKey: { name: "SK", type: AttributeType.STRING },
       stream: StreamViewType.NEW_AND_OLD_IMAGES,
+      pointInTimeRecovery: stage === "prod",
       removalPolicy:
         stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
     });
@@ -189,6 +190,7 @@ export class ServiceStripeStack extends Stack {
       partitionKey: { name: "PK", type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       timeToLiveAttribute: "ttl",
+      pointInTimeRecovery: stage === "prod",
       removalPolicy:
         stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
     });
@@ -996,5 +998,99 @@ export class ServiceStripeStack extends Stack {
     );
 
     usageDlqAlarm.addAlarmAction(new SnsAction(alertingTopic));
+
+    // ============================================================================
+    // DLQ PROCESSOR
+    // Automatically retries failed events from the DLQ (max 5 retries)
+    // Events exhausting all retries are sent to a Final DLQ for investigation
+    // ============================================================================
+
+    const finalDLQ = new Queue(
+      this,
+      `${serviceName}-final-dlq-${stage}`,
+      {
+        queueName: `${serviceName}-final-dlq-${stage}`,
+        retentionPeriod: Duration.days(14),
+        removalPolicy:
+          stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+      },
+    );
+
+    const finalDLQAlarm = new Alarm(
+      this,
+      `${serviceName}-final-dlq-alarm-${stage}`,
+      {
+        alarmName: `${serviceName}-final-dlq-not-empty-${stage}`,
+        alarmDescription:
+          `[service-stripe] [${stage}] Events in Final DLQ — exhausted all retries. ` +
+          "These events have failed 5+ times and require manual investigation.",
+        metric: finalDLQ.metricApproximateNumberOfMessagesVisible({
+          period: Duration.minutes(5),
+        }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+      },
+    );
+
+    finalDLQAlarm.addAlarmAction(new SnsAction(alertingTopic));
+
+    const dlqProcessorPath = path.join(
+      __dirname,
+      "../../src/functions/Lambda/DLQProcessor/DLQProcessor.handler.ts",
+    );
+
+    const dlqProcessorLogGroup = new LogGroup(
+      this,
+      `${serviceName}-dlq-processor-log-group-${stage}`,
+      {
+        logGroupName: `/aws/lambda/${serviceName}-dlq-processor-${stage}`,
+        retention: stage === "prod" ? 30 : 7,
+        removalPolicy: RemovalPolicy.DESTROY,
+      },
+    );
+
+    const dlqProcessorLambda = new TSLambdaFunction(
+      this,
+      `${serviceName}-dlq-processor-${stage}`,
+      {
+        serviceName,
+        stage,
+        handlerName: "dlqProcessorHandler",
+        entryPath: dlqProcessorPath,
+        tsConfigPath,
+        functionName: `${serviceName}-dlq-processor-${stage}`,
+        customOptions: {
+          memorySize: 192,
+          timeout: Duration.minutes(1),
+          logGroup: dlqProcessorLogGroup,
+          environment: {
+            STAGE: stage,
+            EVENT_BUS_NAME: targetEventBusName,
+            FINAL_DLQ_URL: finalDLQ.queueUrl,
+            MAX_RETRIES: "5",
+          },
+        },
+      },
+    );
+
+    dlqProcessorLambda.tsLambdaFunction.addToRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ["events:PutEvents"],
+        resources: [targetEventBus.eventBusArn],
+      }),
+    );
+
+    finalDLQ.grantSendMessages(dlqProcessorLambda.tsLambdaFunction);
+
+    dlqProcessorLambda.tsLambdaFunction.addEventSource(
+      new SqsEventSource(eventHandlerDLQ, {
+        batchSize: 5,
+        maxBatchingWindow: Duration.seconds(30),
+        reportBatchItemFailures: true,
+      }),
+    );
   }
 }
