@@ -201,6 +201,7 @@ export class ServiceStripeStack extends Stack {
       `${serviceName}-event-handler-dlq-${stage}`,
       {
         queueName: `${serviceName}-event-handler-dlq-${stage}`,
+        visibilityTimeout: Duration.minutes(2),
         removalPolicy:
           stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
         retentionPeriod: Duration.days(14),
