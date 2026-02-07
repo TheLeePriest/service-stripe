@@ -26,7 +26,7 @@
   },
   "homepage": "https://github.com/TheLeePriest/service-stripe#readme",
   "devDependencies": {
-    "@biomejs/biome": "1.9.4",
+    "@biomejs/biome": "2.0.4",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@types/node": "^22.15.18",
@@ -35,6 +35,7 @@
     "esbuild": "^0.25.4",
     "husky": "^9.1.7",
     "typescript": "^5.8.3",
+    "@types/aws-lambda": "^8.10.149",
     "vitest": "^3.1.3"
   },
   "dependencies": {
@@ -43,11 +44,10 @@
     "@aws-sdk/client-eventbridge": "^3.812.0",
     "@aws-sdk/client-scheduler": "^3.817.0",
     "@aws-sdk/types": "^3.804.0",
-    "@types/aws-lambda": "^8.10.149",
     "aws-cdk-lib": "^2.196.0",
     "envolution": "^1.3.0",
     "stripe": "^18.1.0",
-    "strogger": "^2.0.3",
+    "strogger": "^4.0.2",
     "the-ldk": "^1.0.6",
     "ts-node": "^10.9.2"
   }

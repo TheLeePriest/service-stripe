@@ -3,7 +3,7 @@ import type {
   SubscriptionCreatedDependencies,
   ProcessedSubscriptionItem,
 } from "./SubscriptionCreated.types";
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import { sendEvent } from "../lib/sendEvent";
 import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 import type Stripe from "stripe";
 
@@ -19,11 +19,7 @@ export const subscriptionCreated =
       logger,
     } = dependencies;
 
-    logger.logStripeEvent(
-      "customer.subscription.created",
-      subscription as unknown as Record<string, unknown>,
-    );
-    logger.info("Processing subscription created", { subscription });
+    logger.info("Processing subscription created", { eventType: "customer.subscription.created", subscription });
     // Generate idempotency key
     const eventId = generateEventId(
       "subscription-created",
@@ -216,36 +212,36 @@ export const subscriptionCreated =
       }
 
       // Send SubscriptionCreated event
-      await eventBridgeClient.send(
-        new PutEventsCommand({
-          Entries: [
-            {
-              Source: "service.stripe",
-              DetailType: "SubscriptionCreated",
-              EventBusName: eventBusName,
-              Detail: JSON.stringify({
-                customerEmail: customerEmail,
-                customerName: customerName,
-                stripeSubscriptionId: subscription.id,
-                stripeCustomerId: subscription.customer,
-                items,
-                status: subscription.status,
-                createdAt: subscription.created,
-                cancelAtPeriodEnd: subscription.cancel_at_period_end,
-                ...(subscription.trial_start && {
-                  trialStart: subscription.trial_start,
-                }),
-                ...(subscription.trial_end && {
-                  trialEnd: subscription.trial_end,
-                }),
-                ...(teamContext && {
-                  teamContext,
-                }),
-                metadata: subscription.metadata,
+      await sendEvent(
+        eventBridgeClient,
+        [
+          {
+            Source: "service.stripe",
+            DetailType: "SubscriptionCreated",
+            EventBusName: eventBusName,
+            Detail: JSON.stringify({
+              customerEmail: customerEmail,
+              customerName: customerName,
+              stripeSubscriptionId: subscription.id,
+              stripeCustomerId: subscription.customer,
+              items,
+              status: subscription.status,
+              createdAt: subscription.created,
+              cancelAtPeriodEnd: subscription.cancel_at_period_end,
+              ...(subscription.trial_start && {
+                trialStart: subscription.trial_start,
               }),
-            },
-          ],
-        }),
+              ...(subscription.trial_end && {
+                trialEnd: subscription.trial_end,
+              }),
+              ...(teamContext && {
+                teamContext,
+              }),
+              metadata: subscription.metadata,
+            }),
+          },
+        ],
+        logger,
       );
 
       logger.info("SubscriptionCreated event sent for subscription", {

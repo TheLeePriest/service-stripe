@@ -5,7 +5,7 @@ import { subscriptionUpdated } from "../SubscriptionUpdated/SubscriptionUpdated"
 import { subscriptionDeleted } from "../SubscriptionDeleted/SubscriptionDeleted";
 import { subscriptionUpgraded } from "../SubscriptionUpgraded/SubscriptionUpgraded";
 import type { EventBridgeEvent } from "aws-lambda";
-import type { StripeEventBridgeDetail, SubscriptionEventConductorDependencies } from "./SubscriptionEventConductor.types";
+import type { SubscriptionEventConductorDependencies } from "./SubscriptionEventConductor.types";
 import type Stripe from "stripe";
 
 vi.mock("../SubscriptionCreated/SubscriptionCreated");
@@ -27,14 +27,13 @@ const mockLogger = {
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
-  logUsageEvent: vi.fn(),
-  logStripeEvent: vi.fn(),
 };
 
 const baseDeps = {
   stripe: {
     customers: {
       retrieve: mockCustomerRetrieve,
+      update: vi.fn(),
     },
     products: {
       retrieve: mockProductRetrieve,
@@ -42,9 +41,14 @@ const baseDeps = {
     subscriptions: {
       retrieve: vi.fn(),
       update: vi.fn(),
+      list: vi.fn(),
+      cancel: vi.fn(),
     },
     prices: { list: vi.fn(), retrieve: vi.fn() },
     billing: { meterEvents: { create: vi.fn() } },
+    paymentMethods: { attach: vi.fn() },
+    refunds: { list: vi.fn() },
+    checkout: { sessions: { retrieve: vi.fn() } },
   },
   eventBridgeClient: {
     send: mockEventBridgeSend,
@@ -63,7 +67,7 @@ const baseDeps = {
 const makeEvent = (
   type: string,
   subscriptionOverride: Record<string, unknown> = {},
-): EventBridgeEvent<string, StripeEventBridgeDetail> => {
+): EventBridgeEvent<string, Stripe.Event> => {
   const testSub = {
     items: { data: [] },
     created: Math.floor(Date.now() / 1000),
@@ -91,7 +95,7 @@ const makeEvent = (
       data: {
         object: testSub as unknown as Stripe.Subscription,
       },
-    },
+    } as unknown as Stripe.Event,
   };
 };
 

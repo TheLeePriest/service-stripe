@@ -1,12 +1,6 @@
-import {
-  type EventBridgeClient,
-  PutEventsCommand,
-} from "@aws-sdk/client-eventbridge";
-import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type { HandleCancellationDependencies } from "./handleCancellation.type";
-import type { Logger } from "../../../types/utils.types";
+import { sendEvent } from "../../../lib/sendEvent";
 import { ensureIdempotency, generateEventId } from "../../../lib/idempotency";
-import type Stripe from "stripe";
 
 export const handleCancellation = async ({
   subscription,
@@ -15,11 +9,7 @@ export const handleCancellation = async ({
   logger,
   dynamoDBClient,
   idempotencyTableName,
-}: HandleCancellationDependencies & { 
-  logger: Logger;
-  dynamoDBClient: DynamoDBClient;
-  idempotencyTableName: string;
-}) => {
+}: HandleCancellationDependencies) => {
   logger.info("Handling cancellation for subscription", { subscriptionId: subscription.id });
 
   // Check if all items are in the past
@@ -59,34 +49,34 @@ export const handleCancellation = async ({
   }
 
   try {
-    await eventBridgeClient.send(
-      new PutEventsCommand({
-        Entries: [
-          {
-            Source: "service.stripe",
-                          DetailType: "SubscriptionCancelled",
-            EventBusName: eventBusName,
-            Detail: JSON.stringify({
-              stripeSubscriptionId: subscription.id,
-              stripeCustomerId: subscription.customer,
-              cancelAt: subscription.cancel_at,
-              cancelAtPeriodEnd: subscription.cancel_at_period_end,
-              items: subscription.items.data.map((item) => ({
-                itemId: item.id,
-                priceId: item.price.id,
-                productId: item.price.product,
-                quantity: item.quantity,
-                expiresAt: item.current_period_end,
-                metadata: item.metadata,
-              })),
-            }),
-          },
-        ],
-      }),
+    await sendEvent(
+      eventBridgeClient,
+      [
+        {
+          Source: "service.stripe",
+          DetailType: "SubscriptionCancelled",
+          EventBusName: eventBusName,
+          Detail: JSON.stringify({
+            stripeSubscriptionId: subscription.id,
+            stripeCustomerId: subscription.customer,
+            cancelAt: subscription.cancel_at,
+            cancelAtPeriodEnd: subscription.cancel_at_period_end,
+            items: subscription.items.data.map((item) => ({
+              itemId: item.id,
+              priceId: item.price.id,
+              productId: item.price.product,
+              quantity: item.quantity,
+              expiresAt: item.current_period_end,
+              metadata: item.metadata,
+            })),
+          }),
+        },
+      ],
+      logger,
     );
     logger.info("Sent SubscriptionCancelled event", { subscriptionId: subscription.id });
   } catch (err) {
-    logger.error("Error sending SubscriptionCancelled event", { 
+    logger.error("Error sending SubscriptionCancelled event", {
       subscriptionId: subscription.id,
       error: err instanceof Error ? err.message : String(err),
     });

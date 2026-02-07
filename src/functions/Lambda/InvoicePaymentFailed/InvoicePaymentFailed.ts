@@ -1,7 +1,6 @@
 import type { EventBridgeEvent } from "aws-lambda";
 import type { InvoicePaymentFailedEvent, InvoicePaymentFailedDependencies } from "./InvoicePaymentFailed.types";
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import type { Logger } from "../types/utils.types";
+import { sendEvent } from "../lib/sendEvent";
 import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 import type Stripe from "stripe";
 
@@ -13,7 +12,7 @@ export const invoicePaymentFailed =
     dynamoDBClient,
     idempotencyTableName,
     logger,
-  }: InvoicePaymentFailedDependencies & { logger: Logger }) =>
+  }: InvoicePaymentFailedDependencies) =>
   async (event: EventBridgeEvent<string, unknown>) => {
     logger.info("InvoicePaymentFailed handler invoked", {
       eventId: event.id,
@@ -25,22 +24,19 @@ export const invoicePaymentFailed =
     });
 
     logger.debug("Raw event structure", {
-      event: JSON.stringify(event, null, 2),
+      eventId: event.id,
+      detailType: event["detail-type"],
     });
 
     try {
       // Extract the Stripe event from the EventBridge event
       const stripeEvent = event.detail as Record<string, unknown>;
-      
+
       logger.info("Extracted Stripe event", {
         stripeEventType: stripeEvent.type,
         stripeEventId: stripeEvent.id,
         hasData: !!stripeEvent.data,
         hasObject: !!(stripeEvent.data as Record<string, unknown>)?.object,
-      });
-
-      logger.debug("Stripe event detail", {
-        stripeEvent: JSON.stringify(stripeEvent, null, 2),
       });
 
       const stripeData = stripeEvent.data as Record<string, unknown>;
@@ -64,10 +60,6 @@ export const invoicePaymentFailed =
         created: invoice.created,
       });
 
-      logger.debug("Full invoice object", {
-        invoice: JSON.stringify(invoice, null, 2),
-      });
-
       // Check for required fields with proper field name mapping
       const stripeInvoiceId = invoice.id as string;
       const customer = invoice.customer as string;
@@ -88,8 +80,6 @@ export const invoicePaymentFailed =
         });
         throw new Error("Invoice missing required fields: id, customer, status, amount_due, or currency");
       }
-
-      logger.logStripeEvent("invoice.payment_failed", stripeEvent as Record<string, unknown>);
 
       // Generate idempotency key
       const eventId = generateEventId("invoice-payment-failed", stripeInvoiceId, created);
@@ -131,32 +121,32 @@ export const invoicePaymentFailed =
       });
 
       // Send event to EventBridge
-      await eventBridgeClient.send(
-        new PutEventsCommand({
-          Entries: [
-            {
-              Source: "service.stripe",
-              DetailType: "InvoicePaymentFailed",
-              Detail: JSON.stringify({
-                stripeInvoiceId,
-                stripeCustomerId: customer,
-                customerEmail: customerData.email,
-                subscriptionId: subscription,
-                status,
-                amountDue: amount_due,
-                currency,
-                attemptCount: attempt_count,
-                createdAt: created,
-                customerData: {
-                  id: customerData.id,
-                  email: customerData.email,
-                  name: customerData.name,
-                },
-              }),
-              EventBusName: eventBusName,
-            },
-          ],
-        }),
+      await sendEvent(
+        eventBridgeClient,
+        [
+          {
+            Source: "service.stripe",
+            DetailType: "InvoicePaymentFailed",
+            Detail: JSON.stringify({
+              stripeInvoiceId,
+              stripeCustomerId: customer,
+              customerEmail: customerData.email,
+              subscriptionId: subscription,
+              status,
+              amountDue: amount_due,
+              currency,
+              attemptCount: attempt_count,
+              createdAt: created,
+              customerData: {
+                id: customerData.id,
+                email: customerData.email,
+                name: customerData.name,
+              },
+            }),
+            EventBusName: eventBusName,
+          },
+        ],
+        logger,
       );
 
       logger.info("InvoicePaymentFailed event sent", {
@@ -178,29 +168,29 @@ export const invoicePaymentFailed =
           failureReason = `Payment failed after ${attempt_count} attempts`;
         }
 
-        await eventBridgeClient.send(
-          new PutEventsCommand({
-            Entries: [
-              {
-                Source: "service.stripe",
-                DetailType: "SendPaymentFailedEmail",
-                Detail: JSON.stringify({
-                  stripeCustomerId: customer,
-                  customerEmail: customerData.email,
-                  customerName: customerData.name || undefined,
-                  failureReason,
-                  retryDate,
-                  updatePaymentUrl: `https://cdkinsights.dev/account/billing?update_payment=true&email=${encodeURIComponent(customerData.email)}`,
-                }),
-                EventBusName: eventBusName,
-              },
-            ],
-          }),
+        await sendEvent(
+          eventBridgeClient,
+          [
+            {
+              Source: "service.stripe",
+              DetailType: "SendPaymentFailedEmail",
+              Detail: JSON.stringify({
+                stripeCustomerId: customer,
+                customerEmail: customerData.email,
+                customerName: customerData.name || undefined,
+                failureReason,
+                retryDate,
+                updatePaymentUrl: "https://cdkinsights.dev/account/billing?update_payment=true",
+              }),
+              EventBusName: eventBusName,
+            },
+          ],
+          logger,
         );
 
         logger.info("SendPaymentFailedEmail event sent", {
           invoiceId: stripeInvoiceId,
-          customerEmail: customerData.email,
+          customerId: customer,
         });
       }
     } catch (error) {

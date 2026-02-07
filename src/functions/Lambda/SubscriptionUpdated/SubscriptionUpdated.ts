@@ -7,8 +7,6 @@ import { handleUncancellation } from "./lib/handleUncancellation/handleUncancell
 import { handleQuantityChange } from "./lib/handleQuantityChange/handleQuantityChange";
 import { determineSubscriptionState } from "./lib/determineSubscriptionState/determineSubscriptionState";
 import { handleRenewal } from "./lib/handleRenewal/handleRenewal";
-import type { Logger } from "../types/utils.types";
-
 export const subscriptionUpdated =
   ({
     eventBridgeClient,
@@ -20,7 +18,7 @@ export const subscriptionUpdated =
     logger,
     dynamoDBClient,
     idempotencyTableName,
-  }: SubscriptionUpdatedDependencies & { logger: Logger }) =>
+  }: SubscriptionUpdatedDependencies) =>
   async (event: SubscriptionUpdatedEvent) => {
     const { id: stripeSubscriptionId, status } = event;
 
@@ -33,10 +31,9 @@ export const subscriptionUpdated =
     });
 
     logger.debug("Raw subscription event structure", {
-      event: JSON.stringify(event, null, 2),
+      subscriptionId: stripeSubscriptionId,
+      status,
     });
-
-    logger.logStripeEvent("customer.subscription.updated", event as unknown as Record<string, unknown>);
 
     try {
       const state = determineSubscriptionState(event);

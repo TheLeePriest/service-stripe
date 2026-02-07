@@ -1,7 +1,6 @@
 import type { EventBridgeEvent } from "aws-lambda";
 import type { InvoicePaymentSucceededEvent, InvoicePaymentSucceededDependencies } from "./InvoicePaymentSucceeded.types";
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import type { Logger } from "../types/utils.types";
+import { sendEvent } from "../lib/sendEvent";
 import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 import type Stripe from "stripe";
 
@@ -13,7 +12,7 @@ export const invoicePaymentSucceeded =
     dynamoDBClient,
     idempotencyTableName,
     logger,
-  }: InvoicePaymentSucceededDependencies & { logger: Logger }) =>
+  }: InvoicePaymentSucceededDependencies) =>
   async (event: EventBridgeEvent<string, unknown>) => {
     logger.info("InvoicePaymentSucceeded handler invoked", {
       eventId: event.id,
@@ -25,22 +24,19 @@ export const invoicePaymentSucceeded =
     });
 
     logger.debug("Raw event structure", {
-      event: JSON.stringify(event, null, 2),
+      eventId: event.id,
+      detailType: event["detail-type"],
     });
 
     try {
       // Extract the Stripe event from the EventBridge event
       const stripeEvent = event.detail as Record<string, unknown>;
-      
+
       logger.info("Extracted Stripe event", {
         stripeEventType: stripeEvent.type,
         stripeEventId: stripeEvent.id,
         hasData: !!stripeEvent.data,
         hasObject: !!(stripeEvent.data as Record<string, unknown>)?.object,
-      });
-
-      logger.debug("Stripe event detail", {
-        stripeEvent: JSON.stringify(stripeEvent, null, 2),
       });
 
       const stripeData = stripeEvent.data as Record<string, unknown>;
@@ -63,10 +59,6 @@ export const invoicePaymentSucceeded =
         created: invoice.created,
       });
 
-      logger.debug("Full invoice object", {
-        invoice: JSON.stringify(invoice, null, 2),
-      });
-
       // Check for required fields with proper field name mapping
       const stripeInvoiceId = invoice.id as string;
       const customer = invoice.customer as string;
@@ -86,8 +78,6 @@ export const invoicePaymentSucceeded =
         });
         throw new Error("Invoice missing required fields: id, customer, status, amount_paid, or currency");
       }
-
-      logger.logStripeEvent("invoice.payment_succeeded", stripeEvent as Record<string, unknown>);
 
       // Generate idempotency key
       const eventId = generateEventId("invoice-payment-succeeded", stripeInvoiceId, created);
@@ -132,32 +122,28 @@ export const invoicePaymentSucceeded =
           });
 
           const stripeSubscription = await stripe.subscriptions.retrieve(subscription);
-          
+
           // Check if this is a renewal by comparing current period start with the invoice creation time
           // A renewal typically has a current_period_start that's close to or after the invoice creation
           const invoiceTime = created * 1000; // Convert to milliseconds
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const periodStartTime = (stripeSubscription as any).current_period_start * 1000;
+          const periodStart = stripeSubscription.items.data[0]?.current_period_start;
+          const periodEnd = stripeSubscription.items.data[0]?.current_period_end;
+          const periodStartTime = periodStart ? periodStart * 1000 : 0;
           const timeDifference = Math.abs(invoiceTime - periodStartTime);
-          
+
           // Consider it a renewal if the period start is within 24 hours of the invoice creation
           // This accounts for timezone differences and slight delays in webhook processing
           const RENEWAL_TIME_THRESHOLD = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-          
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          isRenewal = timeDifference <= RENEWAL_TIME_THRESHOLD && 
+
+          isRenewal = timeDifference <= RENEWAL_TIME_THRESHOLD &&
                      stripeSubscription.status === 'active' &&
-                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                     !(stripeSubscription as any).cancel_at_period_end;
+                     !stripeSubscription.cancel_at_period_end;
 
           if (isRenewal) {
             renewalData = {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              currentPeriodStart: (stripeSubscription as any).current_period_start.toString(),
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              currentPeriodEnd: (stripeSubscription as any).current_period_end.toString(),
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              cancelAtPeriodEnd: (stripeSubscription as any).cancel_at_period_end,
+              currentPeriodStart: periodStart?.toString() || "",
+              currentPeriodEnd: periodEnd?.toString() || "",
+              cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
             };
 
             logger.info("Payment identified as renewal", {
@@ -197,34 +183,33 @@ export const invoicePaymentSucceeded =
       });
 
       // Send enhanced event to EventBridge with renewal information
-      await eventBridgeClient.send(
-        new PutEventsCommand({
-          Entries: [
-            {
-              Source: "service.stripe",
-              DetailType: "InvoicePaymentSucceeded",
-              Detail: JSON.stringify({
-                stripeInvoiceId,
-                stripeCustomerId: customer,
-                customerEmail: customerData.email,
-                subscriptionId: subscription,
-                status,
-                amountPaid: amount_paid,
-                currency,
-                createdAt: created,
-                // Include renewal information for downstream services
-                isRenewal,
-                renewalData,
-                customerData: {
-                  id: customerData.id,
-                  email: customerData.email,
-                  name: customerData.name,
-                },
-              }),
-              EventBusName: eventBusName,
-            },
-          ],
-        }),
+      await sendEvent(
+        eventBridgeClient,
+        [
+          {
+            Source: "service.stripe",
+            DetailType: "InvoicePaymentSucceeded",
+            Detail: JSON.stringify({
+              stripeInvoiceId,
+              stripeCustomerId: customer,
+              customerEmail: customerData.email,
+              subscriptionId: subscription,
+              status,
+              amountPaid: amount_paid,
+              currency,
+              createdAt: created,
+              isRenewal,
+              renewalData,
+              customerData: {
+                id: customerData.id,
+                email: customerData.email,
+                name: customerData.name,
+              },
+            }),
+            EventBusName: eventBusName,
+          },
+        ],
+        logger,
       );
 
       logger.info("InvoicePaymentSucceeded event sent", {
@@ -233,20 +218,18 @@ export const invoicePaymentSucceeded =
 
       // Send email notification for subscription renewals
       if (isRenewal && customerData.email && renewalData) {
-        // Get plan name from subscription if possible
+        // Get plan name from the subscription we already fetched above
         let planName = "Pro";
-        if (subscription) {
-          try {
-            const stripeSubscription = await stripe.subscriptions.retrieve(subscription, {
-              expand: ['items.data.price.product'],
-            });
-            const item = stripeSubscription.items.data[0];
-            if (item?.price?.product && typeof item.price.product === 'object') {
-              planName = (item.price.product as Stripe.Product).name || "Pro";
-            }
-          } catch {
-            // Use default plan name if we can't fetch it
+        try {
+          const subForPlan = await stripe.subscriptions.retrieve(subscription!, {
+            expand: ['items.data.price.product'],
+          });
+          const item = subForPlan.items.data[0];
+          if (item?.price?.product && typeof item.price.product === 'object') {
+            planName = (item.price.product as Stripe.Product).name || "Pro";
           }
+        } catch {
+          // Use default plan name if we can't fetch it
         }
 
         // Format amount with currency symbol
@@ -267,32 +250,32 @@ export const invoicePaymentSucceeded =
             })
           : "your next billing cycle";
 
-        await eventBridgeClient.send(
-          new PutEventsCommand({
-            Entries: [
-              {
-                Source: "service.stripe",
-                DetailType: "SendSubscriptionRenewedEmail",
-                Detail: JSON.stringify({
-                  stripeSubscriptionId: subscription,
-                  stripeCustomerId: customer,
-                  customerEmail: customerData.email,
-                  customerName: customerData.name || undefined,
-                  planName,
-                  amount: formattedAmount,
-                  currency: currencySymbol,
-                  nextRenewalDate,
-                  dashboardUrl: `https://cdkinsights.dev/dashboard`,
-                }),
-                EventBusName: eventBusName,
-              },
-            ],
-          }),
+        await sendEvent(
+          eventBridgeClient,
+          [
+            {
+              Source: "service.stripe",
+              DetailType: "SendSubscriptionRenewedEmail",
+              Detail: JSON.stringify({
+                stripeSubscriptionId: subscription,
+                stripeCustomerId: customer,
+                customerEmail: customerData.email,
+                customerName: customerData.name || undefined,
+                planName,
+                amount: formattedAmount,
+                currency: currencySymbol,
+                nextRenewalDate,
+                dashboardUrl: `https://cdkinsights.dev/dashboard`,
+              }),
+              EventBusName: eventBusName,
+            },
+          ],
+          logger,
         );
 
         logger.info("SendSubscriptionRenewedEmail event sent", {
           invoiceId: stripeInvoiceId,
-          customerEmail: customerData.email,
+          customerId: customer,
           isRenewal: true,
         });
       }

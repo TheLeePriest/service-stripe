@@ -30,9 +30,6 @@ export const createMockEventBridgeClient = () => ({
  * Mock for Logger
  */
 export const createMockLogger = () => ({
-  start: vi.fn(),
-  success: vi.fn(),
-  failure: vi.fn(),
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
@@ -42,17 +39,22 @@ export const createMockLogger = () => ({
 /**
  * Create a mock Stripe subscriptions list response
  */
-export const createSubscriptionsListResponse = (subscriptions: Array<{ id: string; status: string }> = []) => ({
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const createSubscriptionsListResponse = (subscriptions: Array<{ id: string; status: string }> = []): any => ({
   data: subscriptions,
   has_more: false,
+  object: "list",
+  url: "/v1/subscriptions",
 });
 
 /**
  * Create a mock EventBridge put events response
  */
-export const createPutEventsResponse = () => ({
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const createPutEventsResponse = (): any => ({
   FailedEntryCount: 0,
   Entries: [{ EventId: "test-event-id" }],
+  $metadata: {},
 });
 
 /**

@@ -3,8 +3,7 @@ import type {
   SetupIntentSucceededDependencies,
   SetupIntentSucceededEvent,
 } from "./SetupIntentSucceeded.types";
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import type { Logger } from "../types/utils.types";
+import { sendEvent } from "../lib/sendEvent";
 import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 import type Stripe from "stripe";
 
@@ -16,7 +15,7 @@ export const setupIntentSucceeded =
     dynamoDBClient,
     idempotencyTableName,
     logger,
-  }: SetupIntentSucceededDependencies & { logger: Logger }) =>
+  }: SetupIntentSucceededDependencies) =>
   async (event: EventBridgeEvent<string, unknown>) => {
     logger.info("SetupIntentSucceeded handler invoked", {
       eventId: event.id,
@@ -28,7 +27,8 @@ export const setupIntentSucceeded =
     });
 
     logger.debug("Raw event structure", {
-      event: JSON.stringify(event, null, 2),
+      eventId: event.id,
+      detailType: event["detail-type"],
     });
 
     try {
@@ -40,10 +40,6 @@ export const setupIntentSucceeded =
         stripeEventId: stripeEvent.id,
         hasData: !!stripeEvent.data,
         hasObject: !!(stripeEvent.data as Record<string, unknown>)?.object,
-      });
-
-      logger.debug("Stripe event detail", {
-        stripeEvent: JSON.stringify(stripeEvent, null, 2),
       });
 
       const stripeData = stripeEvent.data as Record<string, unknown>;
@@ -65,10 +61,6 @@ export const setupIntentSucceeded =
         metadata: setupIntent.metadata,
       });
 
-      logger.debug("Full setup intent object", {
-        setupIntent: JSON.stringify(setupIntent, null, 2),
-      });
-
       if (!setupIntent.id || !setupIntent.customer || !setupIntent.payment_method) {
         logger.error("Missing required setup intent fields", {
           setupIntentId: setupIntent.id,
@@ -83,8 +75,6 @@ export const setupIntentSucceeded =
       const paymentMethodId = setupIntent.payment_method as string;
       const metadata = (setupIntent.metadata || {}) as Record<string, string>;
       const created = setupIntent.created as number;
-
-      logger.logStripeEvent("setup_intent.succeeded", stripeEvent as Record<string, unknown>);
 
       // Check if this is for a subscription upgrade
       const subscriptionId = metadata.subscription_id;
@@ -232,29 +222,29 @@ export const setupIntentSucceeded =
       });
 
       // 4. Send event to EventBridge for downstream services
-      await eventBridgeClient.send(
-        new PutEventsCommand({
-          Entries: [
-            {
-              Source: "service.stripe",
-              DetailType: "SetupIntentSucceeded",
-              Detail: JSON.stringify({
-                stripeSetupIntentId: setupIntentId,
-                stripePaymentMethodId: paymentMethodId,
-                stripeCustomerId: customer,
-                stripeSubscriptionId: subscriptionId,
-                upgradeType: "trial_to_paid",
-                upgradedAt: new Date().toISOString(),
-                metadata: {
-                  ...metadata,
-                  processed_by: "service-stripe",
-                  processed_at: new Date().toISOString(),
-                },
-              }),
-              EventBusName: eventBusName,
-            },
-          ],
-        }),
+      await sendEvent(
+        eventBridgeClient,
+        [
+          {
+            Source: "service.stripe",
+            DetailType: "SetupIntentSucceeded",
+            Detail: JSON.stringify({
+              stripeSetupIntentId: setupIntentId,
+              stripePaymentMethodId: paymentMethodId,
+              stripeCustomerId: customer,
+              stripeSubscriptionId: subscriptionId,
+              upgradeType: "trial_to_paid",
+              upgradedAt: new Date().toISOString(),
+              metadata: {
+                ...metadata,
+                processed_by: "service-stripe",
+                processed_at: new Date().toISOString(),
+              },
+            }),
+            EventBusName: eventBusName,
+          },
+        ],
+        logger,
       );
 
       logger.info("SetupIntentSucceeded event sent", {

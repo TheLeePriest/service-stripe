@@ -17,6 +17,7 @@ export interface SubscriptionPauseRequestedDependencies {
         id: string;
         status: string;
         pause_collection: unknown | null;
+        cancel_at_period_end: boolean;
         metadata?: Record<string, string>;
       }>;
       update: (
@@ -29,7 +30,7 @@ export interface SubscriptionPauseRequestedDependencies {
     info: (message: string, context?: Record<string, unknown>) => void;
     warn: (message: string, context?: Record<string, unknown>) => void;
     error: (message: string, context?: Record<string, unknown>) => void;
-    success: (message: string, context?: Record<string, unknown>) => void;
+    debug: (message: string, context?: Record<string, unknown>) => void;
   };
 }
 

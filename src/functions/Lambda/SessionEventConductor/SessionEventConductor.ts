@@ -23,7 +23,8 @@ export const sessionEventConductor =
     });
 
     logger.debug("Raw session event structure", {
-      event: JSON.stringify(event, null, 2),
+      eventId: event.id,
+      detailType: event["detail-type"],
     });
 
     try {
@@ -61,14 +62,15 @@ export const sessionEventConductor =
       });
 
       logger.debug("Full session event detail", {
-        session: JSON.stringify(session, null, 2),
+        sessionId,
+        stripeCustomerId,
+        resourcesAnalyzed,
       });
 
       if (
         !sessionId ||
         !customerEmail ||
-        !stripeCustomerId ||
-        typeof resourcesAnalyzed === "undefined"
+        !stripeCustomerId
       ) {
         logger.error("Missing required session event fields", {
           sessionId,

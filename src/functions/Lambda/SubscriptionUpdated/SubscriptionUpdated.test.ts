@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { subscriptionUpdated } from "./SubscriptionUpdated";
 import { handleCancellation } from "./lib/handleCancellation/handleCancellation";
 import { handleUncancellation } from "./lib/handleUncancellation/handleUncancellation";
-import type { SubscriptionUpdatedEvent } from "./SubscriptionUpdated.types";
+import type { SubscriptionUpdatedEvent, SubscriptionUpdatedDependencies } from "./SubscriptionUpdated.types";
 
 vi.mock("./lib/handleCancellation/handleCancellation");
 vi.mock("./lib/handleUncancellation/handleUncancellation");
@@ -57,10 +57,14 @@ describe("subscriptionUpdated", () => {
   const mockProductRetrieve = vi.fn();
   const mockSubscriptionRetrieve = vi.fn();
   const stripe = {
-    customers: { retrieve: mockCustomerRetrieve },
+    customers: { retrieve: mockCustomerRetrieve, update: vi.fn() },
     products: { retrieve: mockProductRetrieve },
-    subscriptions: { retrieve: mockSubscriptionRetrieve },
+    subscriptions: { retrieve: mockSubscriptionRetrieve, update: vi.fn(), list: vi.fn(), cancel: vi.fn() },
     prices: { list: vi.fn(), retrieve: vi.fn() },
+    billing: { meterEvents: { create: vi.fn() } },
+    paymentMethods: { attach: vi.fn() },
+    refunds: { list: vi.fn() },
+    checkout: { sessions: { retrieve: vi.fn() } },
   };
 
   const mockLogger = {
@@ -68,11 +72,11 @@ describe("subscriptionUpdated", () => {
     warn: vi.fn(),
     error: vi.fn(),
     debug: vi.fn(),
-    logUsageEvent: vi.fn(),
-    logStripeEvent: vi.fn(),
   };
 
-  const dependencies = {
+  const mockDynamoDBSend = vi.fn();
+
+  const dependencies: SubscriptionUpdatedDependencies = {
     eventBusArn,
     eventBusSchedulerRoleArn,
     schedulerClient,
@@ -80,7 +84,9 @@ describe("subscriptionUpdated", () => {
     eventBridgeClient,
     stripe,
     logger: mockLogger,
-  };
+    dynamoDBClient: { send: mockDynamoDBSend } as unknown as SubscriptionUpdatedDependencies['dynamoDBClient'],
+    idempotencyTableName: "test-table",
+  } as SubscriptionUpdatedDependencies;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,6 +107,8 @@ describe("subscriptionUpdated", () => {
       eventBridgeClient,
       eventBusName,
       logger: mockLogger,
+      dynamoDBClient: dependencies.dynamoDBClient,
+      idempotencyTableName: "test-table",
     });
     expect(mockHandleUncancellation).not.toHaveBeenCalled();
   });

@@ -13,11 +13,17 @@ describe("subscriptionDeleted", () => {
   const mockStripe = {
     customers: {
       retrieve: mockRetrieve,
+      update: vi.fn(),
     },
     products: {
       retrieve: vi.fn(),
     },
+    subscriptions: { retrieve: vi.fn(), update: vi.fn(), list: vi.fn(), cancel: vi.fn() },
     prices: { list: vi.fn(), retrieve: vi.fn() },
+    billing: { meterEvents: { create: vi.fn() } },
+    paymentMethods: { attach: vi.fn() },
+    refunds: { list: vi.fn() },
+    checkout: { sessions: { retrieve: vi.fn() } },
   };
   const mockEventBridgeClient = {
     send: mockEventBridgeSend,
@@ -29,8 +35,6 @@ describe("subscriptionDeleted", () => {
     warn: vi.fn(),
     error: vi.fn(),
     debug: vi.fn(),
-    logUsageEvent: vi.fn(),
-    logStripeEvent: vi.fn(),
   };
 
   const dependencies = {

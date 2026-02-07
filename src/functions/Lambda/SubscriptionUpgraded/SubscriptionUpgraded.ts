@@ -3,14 +3,13 @@ import type {
   SubscriptionUpgradedDependencies,
   SubscriptionUpgradedResult,
 } from "./SubscriptionUpgraded.types";
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import { sendEvent } from "../lib/sendEvent";
 
 export const subscriptionUpgraded =
   (dependencies: SubscriptionUpgradedDependencies) =>
   async (subscription: SubscriptionUpgradedEvent): Promise<SubscriptionUpgradedResult> => {
     const { stripe, eventBridgeClient, eventBusName, logger } = dependencies;
     
-    logger.logStripeEvent("customer.subscription.upgraded", subscription as unknown as Record<string, unknown>);
     logger.info("Processing subscription upgrade", { 
       subscriptionId: subscription.id,
       customerId: subscription.customer,
@@ -114,40 +113,37 @@ export const subscriptionUpgraded =
       }
 
       // Emit SubscriptionUpgraded event for downstream services
-      await eventBridgeClient.send(
-        new PutEventsCommand({
-          Entries: [
-            {
-              Source: "service.stripe",
-              DetailType: "SubscriptionUpgraded",
-              EventBusName: eventBusName,
-              Detail: JSON.stringify({
-                stripeSubscriptionId: subscription.id,
-                stripeCustomerId: subscription.customer,
-                customerEmail,
-                customerName,
-                items,
-                status: subscription.status,
-                createdAt: subscription.created,
-                cancelAtPeriodEnd: subscription.cancel_at_period_end,
-                // Upgrade-specific information
-                upgradeType,
-                originalTrialSubscriptionId,
-                upgradeReason,
-                productTier,
-                pricingModel,
-                // Team context if applicable
-                ...(teamContext && { teamContext }),
-                // Metadata for tracking
-                metadata: {
-                  ...subscription.metadata,
-                  processed_by: 'service-stripe',
-                  processed_at: new Date().toISOString(),
-                },
-              }),
-            },
-          ],
-        }),
+      await sendEvent(
+        eventBridgeClient,
+        [
+          {
+            Source: "service.stripe",
+            DetailType: "SubscriptionUpgraded",
+            EventBusName: eventBusName,
+            Detail: JSON.stringify({
+              stripeSubscriptionId: subscription.id,
+              stripeCustomerId: subscription.customer,
+              customerEmail,
+              customerName,
+              items,
+              status: subscription.status,
+              createdAt: subscription.created,
+              cancelAtPeriodEnd: subscription.cancel_at_period_end,
+              upgradeType,
+              originalTrialSubscriptionId,
+              upgradeReason,
+              productTier,
+              pricingModel,
+              ...(teamContext && { teamContext }),
+              metadata: {
+                ...subscription.metadata,
+                processed_by: 'service-stripe',
+                processed_at: new Date().toISOString(),
+              },
+            }),
+          },
+        ],
+        logger,
       );
 
       logger.info("SubscriptionUpgraded event emitted successfully", {

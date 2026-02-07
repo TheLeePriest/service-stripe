@@ -1,8 +1,8 @@
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import type {
   ArchiveStripeCustomerEvent,
   ArchiveStripeCustomerDependencies,
 } from "./ArchiveStripeCustomer.types";
+import { sendEvent } from "../lib/sendEvent";
 
 export const archiveStripeCustomer =
   ({
@@ -57,21 +57,21 @@ export const archiveStripeCustomer =
       });
 
       // Emit completion event
-      await eventBridgeClient.send(
-        new PutEventsCommand({
-          Entries: [
-            {
-              Source: "service.stripe",
-              DetailType: "StripeCustomerArchived",
-              Detail: JSON.stringify({
-                stripeCustomerId,
-                deletionRequestId,
-                archivedAt: Math.floor(Date.now() / 1000),
-              }),
-              EventBusName: eventBusName,
-            },
-          ],
-        })
+      await sendEvent(
+        eventBridgeClient,
+        [
+          {
+            Source: "service.stripe",
+            DetailType: "StripeCustomerArchived",
+            Detail: JSON.stringify({
+              stripeCustomerId,
+              deletionRequestId,
+              archivedAt: Math.floor(Date.now() / 1000),
+            }),
+            EventBusName: eventBusName,
+          },
+        ],
+        logger,
       );
     } catch (error: unknown) {
       // Handle case where customer doesn't exist

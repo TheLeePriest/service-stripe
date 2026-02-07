@@ -1,5 +1,5 @@
 import type Stripe from "stripe";
-import type { StripeLogger } from "../types/logger.types";
+import type { Logger } from "../types/utils.types";
 
 export type SendUsageToStripeDependencies = {
   stripeClient: {
@@ -21,7 +21,7 @@ export type SendUsageToStripeDependencies = {
       };
     };
   };
-  logger: StripeLogger;
+  logger: Logger;
   config: {
     enterpriseUsagePriceId?: string;
   };

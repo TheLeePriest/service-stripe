@@ -1,5 +1,4 @@
 import Stripe from "stripe";
-import { v4 as uuidv4 } from "uuid";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { subscriptionEventConductor } from "./SubscriptionEventConductor";
@@ -44,7 +43,6 @@ const logger = createStripeLogger(
 export const subscriptionEventConductorHandler = subscriptionEventConductor({
   stripe,
   eventBridgeClient,
-  uuidv4,
   eventBusName,
   eventBusSchedulerRoleArn,
   eventBusArn,

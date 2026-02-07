@@ -1,4 +1,5 @@
 import type Stripe from "stripe";
+import type { Logger } from "../types/utils.types";
 
 export type SendQuantityChangeToStripeDependencies = {
   stripeClient: {
@@ -16,6 +17,7 @@ export type SendQuantityChangeToStripeDependencies = {
       retrieve: (id: string) => Promise<Stripe.Response<Stripe.Subscription>>;
     };
   };
+  logger: Logger;
 };
 
 export type LicenseQuantityChange = {

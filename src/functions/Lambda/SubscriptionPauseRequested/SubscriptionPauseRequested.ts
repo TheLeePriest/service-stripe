@@ -69,7 +69,7 @@ export const subscriptionPauseRequested =
       cancel_at_period_end: true,
     });
 
-    logger.success("Cancelled Stripe subscription at period end", {
+    logger.info("Cancelled Stripe subscription at period end", {
       ...context,
       stripeSubscriptionId,
     });

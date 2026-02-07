@@ -29,8 +29,6 @@ const mockLogger = {
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
-  logUsageEvent: vi.fn(),
-  logStripeEvent: vi.fn(),
 };
 
 const makeSubscription = (itemIds: string[]): SubscriptionUpdatedEvent => ({
@@ -56,16 +54,13 @@ beforeEach(() => {
 });
 
 describe("handleUncancellation", () => {
-  it("deletes all schedules for subscription items", async () => {
-    mockSend.mockResolvedValue({});
+  it("deletes the schedule for the subscription", async () => {
+    mockSend.mockResolvedValueOnce({});
     const subscription = makeSubscription(["item_1", "item_2"]);
 
     await handleUncancellation(subscription, mockSchedulerClient, mockLogger);
 
-    expect(mockSend).toHaveBeenCalledTimes(2);
-    expect(DeleteScheduleCommand).toHaveBeenCalledWith({
-      Name: "subscription-cancel-sub_123",
-    });
+    expect(mockSend).toHaveBeenCalledTimes(1);
     expect(DeleteScheduleCommand).toHaveBeenCalledWith({
       Name: "subscription-cancel-sub_123",
     });
@@ -74,7 +69,6 @@ describe("handleUncancellation", () => {
   it("logs and skips if schedule not found", async () => {
     const error = { name: ResourceNotFoundException.name };
     mockSend.mockRejectedValueOnce(error);
-    mockSend.mockResolvedValueOnce({});
     const subscription = makeSubscription(["item_1", "item_2"]);
 
     await handleUncancellation(subscription, mockSchedulerClient, mockLogger);

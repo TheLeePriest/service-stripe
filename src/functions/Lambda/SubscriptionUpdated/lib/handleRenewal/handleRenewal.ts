@@ -1,25 +1,15 @@
-import {
-  type EventBridgeClient,
-  PutEventsCommand,
-} from "@aws-sdk/client-eventbridge";
-import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type { HandleRenewal } from "./handleRenewal.types";
-import type { Logger } from "../../../types/utils.types";
+import { sendEvent } from "../../../lib/sendEvent";
 import { ensureIdempotency, generateEventId } from "../../../lib/idempotency";
 
 export const handleRenewal = async ({
   subscription,
   eventBridgeClient,
   eventBusName,
-  stripe,
   logger,
   dynamoDBClient,
   idempotencyTableName,
-}: HandleRenewal & { 
-  logger: Logger;
-  dynamoDBClient: DynamoDBClient;
-  idempotencyTableName: string;
-}) => {
+}: HandleRenewal) => {
   logger.info("Handling renewal for subscription", { subscriptionId: subscription.id });
 
   const earliestRenewalDate = Math.min(
@@ -50,40 +40,39 @@ export const handleRenewal = async ({
   }
 
   try {
-    await eventBridgeClient.send(
-      new PutEventsCommand({
-        Entries: [
-          {
-            EventBusName: eventBusName,
-            Source: "service.stripe",
-            DetailType: "SubscriptionRenewed",
-            Detail: JSON.stringify({
-              stripeSubscriptionId: subscription.id,
-              stripeCustomerId: subscription.customer,
-              earliestRenewalDate: earliestRenewalDate,
-              cancelAtPeriodEnd: subscription.cancel_at_period_end,
-              items: subscription.items.data.map((item) => ({
-                itemId: item.id,
-                quantity: item.quantity,
-                started: item.current_period_start,
-                expiresAt: item.current_period_end,
-                productId: item.price.product,
-                priceId: item.price.id,
-                // Include price metadata to identify metered items for usage reporting
-                metadata: {
-                  ...(item.price.metadata || {}),
-                  ...(item.price.recurring?.usage_type === 'metered' ? { metered: 'true', usage_type: 'metered' } : {}),
-                },
-              })),
-            }),
-          },
-        ],
-      }),
+    await sendEvent(
+      eventBridgeClient,
+      [
+        {
+          EventBusName: eventBusName,
+          Source: "service.stripe",
+          DetailType: "SubscriptionRenewed",
+          Detail: JSON.stringify({
+            stripeSubscriptionId: subscription.id,
+            stripeCustomerId: subscription.customer,
+            earliestRenewalDate: earliestRenewalDate,
+            cancelAtPeriodEnd: subscription.cancel_at_period_end,
+            items: subscription.items.data.map((item) => ({
+              itemId: item.id,
+              quantity: item.quantity,
+              started: item.current_period_start,
+              expiresAt: item.current_period_end,
+              productId: item.price.product,
+              priceId: item.price.id,
+              metadata: {
+                ...(item.price.metadata || {}),
+                ...(item.price.recurring?.usage_type === 'metered' ? { metered: 'true', usage_type: 'metered' } : {}),
+              },
+            })),
+          }),
+        },
+      ],
+      logger,
     );
 
     logger.info("Sent SubscriptionRenewed event", { subscriptionId: subscription.id });
   } catch (err) {
-    logger.error("Error sending SubscriptionRenewed event", { 
+    logger.error("Error sending SubscriptionRenewed event", {
       subscriptionId: subscription.id,
       error: err instanceof Error ? err.message : String(err),
     });

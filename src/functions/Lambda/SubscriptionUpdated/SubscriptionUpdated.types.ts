@@ -6,6 +6,7 @@ import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type Stripe from "stripe";
 import type { StripeClient } from "../types/stripe.types";
 import type { SchedulerClient } from "../types/aws.types";
+import type { Logger } from "../types/utils.types";
 
 export type SubscriptionUpdatedDependencies = {
   eventBridgeClient: {
@@ -18,13 +19,14 @@ export type SubscriptionUpdatedDependencies = {
   stripe: StripeClient;
   dynamoDBClient: DynamoDBClient;
   idempotencyTableName: string;
+  logger: Logger;
 };
 
 export type SubscriptionUpdatedEvent = {
   items: {
     data: Array<{
       id: string;
-      price: { product: string; id: string };
+      price: { product: string; id: string; metadata?: Record<string, string>; recurring?: { usage_type?: string } };
       quantity: number;
       current_period_end: number;
       current_period_start: number;

@@ -1,11 +1,9 @@
 import type Stripe from "stripe";
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type {
   SubscriptionDeletedDependencies,
   SubscriptionDeletedEvent,
 } from "./SubscriptionDeleted.types";
-import type { Logger } from "../types/utils.types";
+import { sendEvent } from "../lib/sendEvent";
 import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 
 export const subscriptionDeleted =
@@ -16,11 +14,7 @@ export const subscriptionDeleted =
     logger,
     dynamoDBClient,
     idempotencyTableName,
-  }: SubscriptionDeletedDependencies & { 
-    logger: Logger;
-    dynamoDBClient: DynamoDBClient;
-    idempotencyTableName: string;
-  }) =>
+  }: SubscriptionDeletedDependencies) =>
   async (event: SubscriptionDeletedEvent) => {
     const {
       id: stripeSubscriptionId,
@@ -30,8 +24,7 @@ export const subscriptionDeleted =
       customer,
     } = event;
     
-    logger.logStripeEvent("customer.subscription.deleted", event as unknown as Record<string, unknown>);
-    logger.debug("Received subscriptionDeleted event", { event });
+    logger.debug("Received subscriptionDeleted event", { eventType: "customer.subscription.deleted", event });
     
     try {
       const stripeCustomer = (await stripe.customers.retrieve(
@@ -70,23 +63,23 @@ export const subscriptionDeleted =
         return;
       }
 
-      await eventBridgeClient.send(
-        new PutEventsCommand({
-          Entries: [
-            {
-              Source: "service.stripe",
-              DetailType: "SubscriptionDeleted",
-              EventBusName: eventBusName,
-              Detail: JSON.stringify({
-                userEmail: email,
-                stripeSubscriptionId,
-                status,
-                endedAt: ended_at,
-                canceledAt: canceled_at,
-              }),
-            },
-          ],
-        }),
+      await sendEvent(
+        eventBridgeClient,
+        [
+          {
+            Source: "service.stripe",
+            DetailType: "SubscriptionDeleted",
+            EventBusName: eventBusName,
+            Detail: JSON.stringify({
+              userEmail: email,
+              stripeSubscriptionId,
+              status,
+              endedAt: ended_at,
+              canceledAt: canceled_at,
+            }),
+          },
+        ],
+        logger,
       );
 
       logger.info("SubscriptionDeleted event sent", {
@@ -134,23 +127,23 @@ export const subscriptionDeleted =
 
         if (isTrialExpiration) {
           // Send trial expired email instead of cancellation email
-          await eventBridgeClient.send(
-            new PutEventsCommand({
-              Entries: [
-                {
-                  Source: "service.stripe",
-                  DetailType: "SendTrialExpiredEmail",
-                  EventBusName: eventBusName,
-                  Detail: JSON.stringify({
-                    stripeSubscriptionId,
-                    stripeCustomerId: customer,
-                    customerEmail: email,
-                    customerName: stripeCustomer.name || undefined,
-                    upgradeUrl: `https://cdkinsights.dev/pricing?upgrade=true&email=${encodeURIComponent(email)}`,
-                  }),
-                },
-              ],
-            }),
+          await sendEvent(
+            eventBridgeClient,
+            [
+              {
+                Source: "service.stripe",
+                DetailType: "SendTrialExpiredEmail",
+                EventBusName: eventBusName,
+                Detail: JSON.stringify({
+                  stripeSubscriptionId,
+                  stripeCustomerId: customer,
+                  customerEmail: email,
+                  customerName: stripeCustomer.name || undefined,
+                  upgradeUrl: "https://cdkinsights.dev/pricing?upgrade=true",
+                }),
+              },
+            ],
+            logger,
           );
 
           logger.info("SendTrialExpiredEmail event sent", {
@@ -215,31 +208,30 @@ export const subscriptionDeleted =
             });
           }
 
-          await eventBridgeClient.send(
-            new PutEventsCommand({
-              Entries: [
-                {
-                  Source: "service.stripe",
-                  DetailType: "SendSubscriptionCancelledEmail",
-                  EventBusName: eventBusName,
-                  Detail: JSON.stringify({
-                    stripeSubscriptionId,
-                    stripeCustomerId: customer,
-                    customerEmail: email,
-                    customerName: stripeCustomer.name || undefined,
-                    accessEndDate,
-                    reactivateUrl: `https://cdkinsights.dev/pricing?reactivate=true&email=${encodeURIComponent(email)}`,
-                    // Include refund info if present
-                    ...(refundInfo && {
-                      refundProcessed: refundInfo.refundProcessed,
-                      refundAmount: refundInfo.refundAmount,
-                      refundCurrency: refundInfo.refundCurrency,
-                      overageAmountNotRefunded: refundInfo.overageAmountNotRefunded,
-                    }),
+          await sendEvent(
+            eventBridgeClient,
+            [
+              {
+                Source: "service.stripe",
+                DetailType: "SendSubscriptionCancelledEmail",
+                EventBusName: eventBusName,
+                Detail: JSON.stringify({
+                  stripeSubscriptionId,
+                  stripeCustomerId: customer,
+                  customerEmail: email,
+                  customerName: stripeCustomer.name || undefined,
+                  accessEndDate,
+                  reactivateUrl: "https://cdkinsights.dev/pricing?reactivate=true",
+                  ...(refundInfo && {
+                    refundProcessed: refundInfo.refundProcessed,
+                    refundAmount: refundInfo.refundAmount,
+                    refundCurrency: refundInfo.refundCurrency,
+                    overageAmountNotRefunded: refundInfo.overageAmountNotRefunded,
                   }),
-                },
-              ],
-            }),
+                }),
+              },
+            ],
+            logger,
           );
 
           logger.info("SendSubscriptionCancelledEmail event sent", {

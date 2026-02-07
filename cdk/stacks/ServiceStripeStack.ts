@@ -22,6 +22,9 @@ import {
 import { Queue } from "aws-cdk-lib/aws-sqs";
 import { SqsQueue } from "aws-cdk-lib/aws-events-targets";
 import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
+import { Alarm, ComparisonOperator, TreatMissingData } from "aws-cdk-lib/aws-cloudwatch";
+import { SnsAction } from "aws-cdk-lib/aws-cloudwatch-actions";
+import { Topic } from "aws-cdk-lib/aws-sns";
 
 export class ServiceStripeStack extends Stack {
   constructor(scope: Construct, id: string, props: StripeStackProps) {
@@ -190,6 +193,17 @@ export class ServiceStripeStack extends Stack {
         stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
     });
 
+    // Shared DLQ for EventBridge-triggered Lambda failures
+    const eventHandlerDLQ = new Queue(
+      this,
+      `${serviceName}-event-handler-dlq-${stage}`,
+      {
+        queueName: `${serviceName}-event-handler-dlq-${stage}`,
+        removalPolicy:
+          stage === "prod" ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY,
+        retentionPeriod: Duration.days(14),
+      },
+    );
 
     const sessionEventConductorLambdaPath = path.join(
       __dirname,
@@ -249,7 +263,11 @@ export class ServiceStripeStack extends Stack {
     );
 
     sessionConductorRule.addTarget(
-      new LambdaFunction(sessionEventConductorLambda.tsLambdaFunction),
+      new LambdaFunction(sessionEventConductorLambda.tsLambdaFunction, {
+        deadLetterQueue: eventHandlerDLQ,
+        maxEventAge: Duration.hours(1),
+        retryAttempts: 2,
+      }),
     );
 
     const subscriptionEventConductorPath = path.join(
@@ -319,7 +337,11 @@ export class ServiceStripeStack extends Stack {
     );
 
     subscriptionConductorRule.addTarget(
-      new LambdaFunction(subscriptionEventConductorLambda.tsLambdaFunction),
+      new LambdaFunction(subscriptionEventConductorLambda.tsLambdaFunction, {
+        deadLetterQueue: eventHandlerDLQ,
+        maxEventAge: Duration.hours(1),
+        retryAttempts: 2,
+      }),
     );
 
     subscriptionEventConductorLambda.tsLambdaFunction.addToRolePolicy(
@@ -329,12 +351,17 @@ export class ServiceStripeStack extends Stack {
           "scheduler:UpdateSchedule",
           "scheduler:GetSchedule",
           "scheduler:DeleteSchedule",
-          "iam:PassRole",
         ],
         resources: [
-          schedulerRole.roleArn,
           `arn:aws:scheduler:${this.region}:${this.account}:schedule/default/*`,
         ],
+      }),
+    );
+
+    subscriptionEventConductorLambda.tsLambdaFunction.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["iam:PassRole"],
+        resources: [schedulerRole.roleArn],
       }),
     );
 
@@ -370,10 +397,6 @@ export class ServiceStripeStack extends Stack {
           environment: {
             STRIPE_SECRET_KEY,
             STAGE: stage,
-            TARGET_EVENT_BUS_NAME: targetEventBusName,
-            SCHEDULER_ROLE_ARN: schedulerRole.roleArn,
-            EVENT_BUS_ARN: targetEventBus.eventBusArn,
-            IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
           },
         },
       },
@@ -393,7 +416,11 @@ export class ServiceStripeStack extends Stack {
     );
 
     sendQuantityChangeToStripeRule.addTarget(
-      new LambdaFunction(sendQuantityChangeToStripeLambda.tsLambdaFunction),
+      new LambdaFunction(sendQuantityChangeToStripeLambda.tsLambdaFunction, {
+        deadLetterQueue: eventHandlerDLQ,
+        maxEventAge: Duration.hours(1),
+        retryAttempts: 2,
+      }),
     );
 
     // Invoice Created Lambda
@@ -707,7 +734,11 @@ export class ServiceStripeStack extends Stack {
     );
 
     subscriptionPauseRequestedRule.addTarget(
-      new LambdaFunction(subscriptionPauseRequestedLambda.tsLambdaFunction),
+      new LambdaFunction(subscriptionPauseRequestedLambda.tsLambdaFunction, {
+        deadLetterQueue: eventHandlerDLQ,
+        maxEventAge: Duration.hours(1),
+        retryAttempts: 2,
+      }),
     );
 
     // EventBridge Rules for new handlers
@@ -725,7 +756,11 @@ export class ServiceStripeStack extends Stack {
     );
 
     invoiceCreatedRule.addTarget(
-      new LambdaFunction(invoiceCreatedLambda.tsLambdaFunction),
+      new LambdaFunction(invoiceCreatedLambda.tsLambdaFunction, {
+        deadLetterQueue: eventHandlerDLQ,
+        maxEventAge: Duration.hours(1),
+        retryAttempts: 2,
+      }),
     );
 
     const invoicePaymentSucceededRule = new Rule(
@@ -742,7 +777,11 @@ export class ServiceStripeStack extends Stack {
     );
 
     invoicePaymentSucceededRule.addTarget(
-      new LambdaFunction(invoicePaymentSucceededLambda.tsLambdaFunction),
+      new LambdaFunction(invoicePaymentSucceededLambda.tsLambdaFunction, {
+        deadLetterQueue: eventHandlerDLQ,
+        maxEventAge: Duration.hours(1),
+        retryAttempts: 2,
+      }),
     );
 
     const invoicePaymentFailedRule = new Rule(
@@ -759,7 +798,11 @@ export class ServiceStripeStack extends Stack {
     );
 
     invoicePaymentFailedRule.addTarget(
-      new LambdaFunction(invoicePaymentFailedLambda.tsLambdaFunction),
+      new LambdaFunction(invoicePaymentFailedLambda.tsLambdaFunction, {
+        deadLetterQueue: eventHandlerDLQ,
+        maxEventAge: Duration.hours(1),
+        retryAttempts: 2,
+      }),
     );
 
     const paymentMethodAttachedRule = new Rule(
@@ -776,7 +819,11 @@ export class ServiceStripeStack extends Stack {
     );
 
     paymentMethodAttachedRule.addTarget(
-      new LambdaFunction(paymentMethodAttachedLambda.tsLambdaFunction),
+      new LambdaFunction(paymentMethodAttachedLambda.tsLambdaFunction, {
+        deadLetterQueue: eventHandlerDLQ,
+        maxEventAge: Duration.hours(1),
+        retryAttempts: 2,
+      }),
     );
 
     const customerCreatedRule = new Rule(
@@ -793,7 +840,11 @@ export class ServiceStripeStack extends Stack {
     );
 
     customerCreatedRule.addTarget(
-      new LambdaFunction(customerCreatedLambda.tsLambdaFunction),
+      new LambdaFunction(customerCreatedLambda.tsLambdaFunction, {
+        deadLetterQueue: eventHandlerDLQ,
+        maxEventAge: Duration.hours(1),
+        retryAttempts: 2,
+      }),
     );
 
     // Setup Intent Succeeded Rule
@@ -811,7 +862,11 @@ export class ServiceStripeStack extends Stack {
     );
 
     setupIntentSucceededRule.addTarget(
-      new LambdaFunction(setupIntentSucceededLambda.tsLambdaFunction),
+      new LambdaFunction(setupIntentSucceededLambda.tsLambdaFunction, {
+        deadLetterQueue: eventHandlerDLQ,
+        maxEventAge: Duration.hours(1),
+        retryAttempts: 2,
+      }),
     );
 
     // ============================================================================
@@ -874,7 +929,72 @@ export class ServiceStripeStack extends Stack {
     );
 
     archiveStripeCustomerRule.addTarget(
-      new LambdaFunction(archiveStripeCustomerLambda.tsLambdaFunction),
+      new LambdaFunction(archiveStripeCustomerLambda.tsLambdaFunction, {
+        deadLetterQueue: eventHandlerDLQ,
+        maxEventAge: Duration.hours(1),
+        retryAttempts: 2,
+      }),
     );
+
+    // ============================================================================
+    // CLOUDWATCH ALARMS
+    // Wired to the centralised CDK Insights alerting SNS topic
+    // ============================================================================
+
+    const alertingTopicArn = StringParameter.fromStringParameterAttributes(
+      this,
+      `${serviceName}-alerting-topic-arn-${stage}`,
+      {
+        parameterName: `/${stage}/cdkinsights/alerting/sns-topic-arn`,
+      },
+    ).stringValue;
+
+    const alertingTopic = Topic.fromTopicArn(
+      this,
+      `${serviceName}-alerting-topic-ref-${stage}`,
+      alertingTopicArn,
+    );
+
+    const dlqAlarm = new Alarm(
+      this,
+      `${serviceName}-event-handler-dlq-alarm-${stage}`,
+      {
+        alarmName: `${serviceName}-event-handler-dlq-not-empty-${stage}`,
+        alarmDescription:
+          `[service-stripe] [${stage}] Failed Stripe events detected in DLQ. ` +
+          "Events landed here after exhausting all retries (1 initial + 2 retries). " +
+          "Check CloudWatch logs for the failing Lambda handler, then redrive messages from the DLQ.",
+        metric: eventHandlerDLQ.metricApproximateNumberOfMessagesVisible({
+          period: Duration.minutes(1),
+        }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+      },
+    );
+
+    dlqAlarm.addAlarmAction(new SnsAction(alertingTopic));
+
+    const usageDlqAlarm = new Alarm(
+      this,
+      `${serviceName}-usage-dlq-alarm-${stage}`,
+      {
+        alarmName: `${serviceName}-usage-dlq-not-empty-${stage}`,
+        alarmDescription:
+          `[service-stripe] [${stage}] Failed usage metering events in DLQ. ` +
+          "Usage records failed to be sent to Stripe after 3 attempts. " +
+          "Check the SendUsageToStripe Lambda logs and redrive messages from the DLQ.",
+        metric: stripeUsageDLQ.metricApproximateNumberOfMessagesVisible({
+          period: Duration.minutes(1),
+        }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+      },
+    );
+
+    usageDlqAlarm.addAlarmAction(new SnsAction(alertingTopic));
   }
 }

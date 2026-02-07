@@ -1,9 +1,5 @@
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type { SendQuantityChangeEvents } from "./sendQuantityChangeEvents.types";
-import type Stripe from "stripe";
-import type { Logger } from "../../../../types/utils.types";
-import type { StripeClient } from "../../../../types/stripe.types";
+import { sendEvent } from "../../../../lib/sendEvent";
 import { ensureIdempotency, generateEventId } from "../../../../lib/idempotency";
 
 export const sendQuantityChangeEvents = async ({
@@ -17,12 +13,7 @@ export const sendQuantityChangeEvents = async ({
   logger,
   dynamoDBClient,
   idempotencyTableName,
-}: SendQuantityChangeEvents & { 
-  logger: Logger;
-  dynamoDBClient: DynamoDBClient;
-  idempotencyTableName: string;
-  stripe: StripeClient;
-}) => {
+}: SendQuantityChangeEvents) => {
   const absoluteDifference = Math.abs(quantityDifference);
   logger.info("Processing quantity change for subscription", {
     subscriptionId: subscription.id,
@@ -106,11 +97,7 @@ export const sendQuantityChangeEvents = async ({
       }
 
       for (const batch of batches) {
-        await eventBridgeClient.send(
-          new PutEventsCommand({
-            Entries: batch,
-          }),
-        );
+        await sendEvent(eventBridgeClient, batch, logger);
       }
 
       logger.info("Successfully sent batch of license creation events", {

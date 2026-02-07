@@ -10,7 +10,7 @@ import type { SubscriptionUpdatedEvent } from "../SubscriptionUpdated/Subscripti
 import type { SubscriptionDeletedEvent } from "../SubscriptionDeleted/SubscriptionDeleted.types";
 import { subscriptionUpgraded } from "../SubscriptionUpgraded/SubscriptionUpgraded";
 import type { Stripe } from "stripe";
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import { sendEvent } from "../lib/sendEvent";
 
 export const subscriptionEventConductor =
   ({
@@ -38,24 +38,24 @@ export const subscriptionEventConductor =
 
     switch (stripeEvent.type) {
       case "customer.subscription.trial_will_end": {
-        await eventBridgeClient.send(
-          new PutEventsCommand({
-            Entries: [
-              {
-                Source: "service.stripe",
-                DetailType: "TrialWillEnd",
-                EventBusName: eventBusName,
-                Detail: JSON.stringify({
-                  stripeSubscriptionId: subscription.id,
-                  stripeCustomerId: subscription.customer,
-                  trialEnd: subscription.trial_end,
-                  status: subscription.status,
-                  createdAt: stripeEvent.created,
-                  metadata: subscription.metadata || {},
-                }),
-              },
-            ],
-          }),
+        await sendEvent(
+          eventBridgeClient,
+          [
+            {
+              Source: "service.stripe",
+              DetailType: "TrialWillEnd",
+              EventBusName: eventBusName,
+              Detail: JSON.stringify({
+                stripeSubscriptionId: subscription.id,
+                stripeCustomerId: subscription.customer,
+                trialEnd: subscription.trial_end,
+                status: subscription.status,
+                createdAt: stripeEvent.created,
+                metadata: subscription.metadata || {},
+              }),
+            },
+          ],
+          logger,
         );
 
         logger.info("Emitted TrialWillEnd event", {
@@ -69,25 +69,25 @@ export const subscriptionEventConductor =
       case "customer.subscription.paused": {
         const pausedAt = stripeEvent.created;
 
-        await eventBridgeClient.send(
-          new PutEventsCommand({
-            Entries: [
-              {
-                Source: "service.stripe",
-                DetailType: "SubscriptionPaused",
-                EventBusName: eventBusName,
-                Detail: JSON.stringify({
-                  stripeSubscriptionId: subscription.id,
-                  status: subscription.status,
-                  stripeCustomerId: subscription.customer,
-                  pausedAt,
-                  trialStart: subscription.trial_start,
-                  trialEnd: subscription.trial_end,
-                  metadata: subscription.metadata || {},
-                }),
-              },
-            ],
-          }),
+        await sendEvent(
+          eventBridgeClient,
+          [
+            {
+              Source: "service.stripe",
+              DetailType: "SubscriptionPaused",
+              EventBusName: eventBusName,
+              Detail: JSON.stringify({
+                stripeSubscriptionId: subscription.id,
+                status: subscription.status,
+                stripeCustomerId: subscription.customer,
+                pausedAt,
+                trialStart: subscription.trial_start,
+                trialEnd: subscription.trial_end,
+                metadata: subscription.metadata || {},
+              }),
+            },
+          ],
+          logger,
         );
 
         logger.info("Emitted SubscriptionPaused event", {
@@ -100,25 +100,25 @@ export const subscriptionEventConductor =
       case "customer.subscription.resumed": {
         const resumedAt = stripeEvent.created;
 
-        await eventBridgeClient.send(
-          new PutEventsCommand({
-            Entries: [
-              {
-                Source: "service.stripe",
-                DetailType: "SubscriptionResumed",
-                EventBusName: eventBusName,
-                Detail: JSON.stringify({
-                  stripeSubscriptionId: subscription.id,
-                  status: subscription.status,
-                  stripeCustomerId: subscription.customer,
-                  resumedAt,
-                  trialStart: subscription.trial_start,
-                  trialEnd: subscription.trial_end,
-                  metadata: subscription.metadata || {},
-                }),
-              },
-            ],
-          }),
+        await sendEvent(
+          eventBridgeClient,
+          [
+            {
+              Source: "service.stripe",
+              DetailType: "SubscriptionResumed",
+              EventBusName: eventBusName,
+              Detail: JSON.stringify({
+                stripeSubscriptionId: subscription.id,
+                status: subscription.status,
+                stripeCustomerId: subscription.customer,
+                resumedAt,
+                trialStart: subscription.trial_start,
+                trialEnd: subscription.trial_end,
+                metadata: subscription.metadata || {},
+              }),
+            },
+          ],
+          logger,
         );
 
         logger.info("Emitted SubscriptionResumed event", {

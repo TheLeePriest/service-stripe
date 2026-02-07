@@ -3,10 +3,8 @@ import type {
   LicenseQuantityChange,
   SendQuantityChangeToStripeDependencies,
 } from "./SendQuantityChangeToStripe.types";
-import type { Logger } from "../types/utils.types";
-
 export const sendQuantityChangeToStripe =
-  ({ stripeClient, logger }: SendQuantityChangeToStripeDependencies & { logger: Logger }) =>
+  ({ stripeClient, logger }: SendQuantityChangeToStripeDependencies) =>
   async (
     event: EventBridgeEvent<
       "LicenseCancelled" | "LicenseUncancelled",
@@ -49,7 +47,7 @@ export const sendQuantityChangeToStripe =
           },
         ],
       }, {
-        idempotencyKey: `quantity-change-${stripeSubscriptionId}-${itemId}-${Date.now()}`,
+        idempotencyKey: `quantity-change-${stripeSubscriptionId}-${itemId}-${quantityChangeType}-${subscriptionQuantity}`,
       });
 
       logger.info("Successfully updated subscription quantity", {

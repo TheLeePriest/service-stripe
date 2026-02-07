@@ -14,11 +14,14 @@ const mockEnsureIdempotency = vi.mocked(ensureIdempotency);
 
 // Create mocks using vi.fn() pattern that works in other tests
 const mockStripe = {
-  customers: { retrieve: vi.fn() },
+  customers: { retrieve: vi.fn(), update: vi.fn() },
   products: { retrieve: vi.fn() },
-  subscriptions: { retrieve: vi.fn(), update: vi.fn() },
+  subscriptions: { retrieve: vi.fn(), update: vi.fn(), list: vi.fn(), cancel: vi.fn() },
   prices: { retrieve: vi.fn() },
-  billing: { meterEvents: { create: vi.fn() } }
+  billing: { meterEvents: { create: vi.fn() } },
+  paymentMethods: { attach: vi.fn() },
+  refunds: { list: vi.fn() },
+  checkout: { sessions: { retrieve: vi.fn() } },
 };
 
 const mockEventBridge = {
@@ -34,8 +37,6 @@ const mockLogger = {
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
-  logUsageEvent: vi.fn(),
-  logStripeEvent: vi.fn()
 };
 
 const dependencies: SubscriptionCreatedDependencies = {

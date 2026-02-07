@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import type { SessionCompletedDependencies } from "./SessionCompleted.types";
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import { sendEvent } from "../lib/sendEvent";
 import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 
 export const sessionCompleted =
@@ -82,7 +82,6 @@ export const sessionCompleted =
         });
         logger.info("Updated Stripe customer with name", {
           customerId: customer.id,
-          name: fullName,
         });
       } catch (updateError) {
         logger.warn("Failed to update Stripe customer name", {
@@ -141,58 +140,55 @@ export const sessionCompleted =
         return;
       }
 
-      await eventBridgeClient.send(
-        new PutEventsCommand({
-          Entries: [
-            {
-              Source: "service.stripe",
-              DetailType: "CustomerCreated",
-              EventBusName: eventBusName,
-              Detail: JSON.stringify({
-                stripeCustomerId: customer.id,
-                customerEmail: email,
-                customerName: fullName,
-                createdAt: Math.floor(Date.now() / 1000),
-                customerData: {
-                  id: customer.id,
-                  email: email,
-                  name: fullName,
-                },
-                userName: email,
+      await sendEvent(
+        eventBridgeClient,
+        [
+          {
+            Source: "service.stripe",
+            DetailType: "CustomerCreated",
+            EventBusName: eventBusName,
+            Detail: JSON.stringify({
+              stripeCustomerId: customer.id,
+              customerEmail: email,
+              customerName: fullName,
+              createdAt: Math.floor(Date.now() / 1000),
+              customerData: {
+                id: customer.id,
+                email: email,
                 name: fullName,
-                signUpDate: now,
-                stripeSubscriptionId: subscription.id,
-                subscriptionStatus: subscription.status,
-                planId: planItem.plan.product,
-                priceId: planItem.price.id,
-                subscriptionStartDate: subscription.start_date
-                  ? new Date(subscription.start_date * 1000).toISOString()
-                  : "",
-                currentPeriodEndDate: new Date(
-                  planItem.current_period_end * 1000,
-                ).toISOString(),
-                currency: subscription.currency,
-                trialEndDate: subscription.trial_end
-                  ? new Date(subscription.trial_end * 1000).toISOString()
-                  : "",
-                cancelAtPeriodEnd: subscription.cancel_at_period_end,
-                organization: organization,
-                firstName: firstName,
-                lastName: lastName,
-                updatedAt: now,
-                isBetaTester: isBetaTester,
-              }),
-            },
-          ],
-        }),
+              },
+              userName: email,
+              name: fullName,
+              signUpDate: now,
+              stripeSubscriptionId: subscription.id,
+              subscriptionStatus: subscription.status,
+              planId: planItem.plan.product,
+              priceId: planItem.price.id,
+              subscriptionStartDate: subscription.start_date
+                ? new Date(subscription.start_date * 1000).toISOString()
+                : "",
+              currentPeriodEndDate: new Date(
+                planItem.current_period_end * 1000,
+              ).toISOString(),
+              currency: subscription.currency,
+              trialEndDate: subscription.trial_end
+                ? new Date(subscription.trial_end * 1000).toISOString()
+                : "",
+              cancelAtPeriodEnd: subscription.cancel_at_period_end,
+              organization: organization,
+              firstName: firstName,
+              lastName: lastName,
+              updatedAt: now,
+              isBetaTester: isBetaTester,
+            }),
+          },
+        ],
+        logger,
       );
 
       logger.info("Customer created event sent to EventBridge", {
         customerId: customer.id,
         subscriptionId: subscription.id,
-        email,
-        firstName,
-        lastName,
       });
     } catch (error) {
       logger.error("Error sending event to EventBridge", { 

@@ -1,6 +1,7 @@
 import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import type { StripeClient } from "../types/stripe.types";
+import type { Logger } from "../types/utils.types";
 
 export interface PaymentMethodAttachedDependencies {
   stripe: StripeClient;
@@ -8,6 +9,7 @@ export interface PaymentMethodAttachedDependencies {
   eventBusName: string;
   dynamoDBClient: DynamoDBClient;
   idempotencyTableName: string;
+  logger: Logger;
 }
 
 export interface PaymentMethodAttachedEvent {

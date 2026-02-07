@@ -4,10 +4,11 @@ import type {
   CustomerCreatedEvent,
   CustomerCreatedDependencies,
 } from "./CustomerCreated.types";
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
+import { sendEvent } from "../lib/sendEvent";
+import { ensureIdempotency, generateEventId } from "../lib/idempotency";
 
 export const customerCreated =
-  ({ eventBridgeClient, eventBusName, logger }: CustomerCreatedDependencies) =>
+  ({ eventBridgeClient, eventBusName, dynamoDBClient, idempotencyTableName, logger }: CustomerCreatedDependencies) =>
   async (event: EventBridgeEvent<"Stripe Event", Stripe.Event>) => {
     logger.info("CustomerCreated handler invoked", {
       eventId: event.id,
@@ -19,7 +20,8 @@ export const customerCreated =
     });
 
     logger.debug("Raw event structure", {
-      event: JSON.stringify(event, null, 2),
+      eventId: event.id,
+      detailType: event["detail-type"],
     });
 
     try {
@@ -41,16 +43,13 @@ export const customerCreated =
 
       logger.info("Extracted customer data", {
         customerId: customer.id,
-        customerEmail: customer.email,
-        customerName: customer.name,
         customerCreated: customer.created,
-        customerMetadata: customer.metadata,
       });
 
       if (!customer.id || !customer.email) {
         logger.error("Missing required customer fields", {
           customerId: customer.id,
-          customerEmail: customer.email,
+          hasEmail: !!customer.email,
         });
         throw new Error("Customer missing required fields: id or email");
       }
@@ -67,10 +66,24 @@ export const customerCreated =
       // email renders "Hi there..." and later upgrades can supply the real name.
       const resolvedName = customerName || "";
 
+      // Check idempotency
+      const eventId = generateEventId("customer-created", customerId, customer.created);
+      const idempotencyResult = await ensureIdempotency(
+        { dynamoDBClient, tableName: idempotencyTableName, logger },
+        eventId,
+        { customerId, email: customerEmail },
+      );
+
+      if (idempotencyResult.isDuplicate) {
+        logger.info("Customer creation already processed, skipping", {
+          customerId,
+          eventId,
+        });
+        return;
+      }
+
       logger.info("Processing customer creation", {
         customerId,
-        customerEmail,
-        customerName,
       });
 
       // Emit EventBridge event for downstream services
@@ -92,21 +105,21 @@ export const customerCreated =
       };
 
       logger.info("Emitting customer created event", {
-        eventDetail,
+        customerId,
         eventBusName,
       });
 
-      await eventBridgeClient.send(
-        new PutEventsCommand({
-          Entries: [
-            {
-              Source: "service.stripe",
-              DetailType: "CustomerCreated",
-              Detail: JSON.stringify(eventDetail),
-              EventBusName: eventBusName,
-            },
-          ],
-        })
+      await sendEvent(
+        eventBridgeClient,
+        [
+          {
+            Source: "service.stripe",
+            DetailType: "CustomerCreated",
+            Detail: JSON.stringify(eventDetail),
+            EventBusName: eventBusName,
+          },
+        ],
+        logger,
       );
 
       logger.info("Successfully emitted customer created event", {

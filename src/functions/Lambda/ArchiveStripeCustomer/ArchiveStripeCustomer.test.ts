@@ -41,7 +41,7 @@ describe("ArchiveStripeCustomer", () => {
       vi.mocked(mockDependencies.stripeClient.subscriptions.list).mockResolvedValue(
         createSubscriptionsListResponse([]),
       );
-      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({});
+      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({} as any);
       vi.mocked(mockDependencies.eventBridgeClient.send).mockResolvedValue(createPutEventsResponse());
 
       await handler(createEvent());
@@ -74,8 +74,8 @@ describe("ArchiveStripeCustomer", () => {
       vi.mocked(mockDependencies.stripeClient.subscriptions.list).mockResolvedValue(
         createSubscriptionsListResponse(activeSubscriptions),
       );
-      vi.mocked(mockDependencies.stripeClient.subscriptions.cancel).mockResolvedValue({});
-      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({});
+      vi.mocked(mockDependencies.stripeClient.subscriptions.cancel).mockResolvedValue({} as any);
+      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({} as any);
       vi.mocked(mockDependencies.eventBridgeClient.send).mockResolvedValue(createPutEventsResponse());
 
       await handler(createEvent());
@@ -99,7 +99,7 @@ describe("ArchiveStripeCustomer", () => {
       vi.mocked(mockDependencies.stripeClient.subscriptions.list).mockResolvedValue(
         createSubscriptionsListResponse([]),
       );
-      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({});
+      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({} as any);
       vi.mocked(mockDependencies.eventBridgeClient.send).mockResolvedValue(createPutEventsResponse());
 
       await handler(createEvent());
@@ -177,7 +177,7 @@ describe("ArchiveStripeCustomer", () => {
       vi.mocked(mockDependencies.stripeClient.subscriptions.list).mockResolvedValue(
         createSubscriptionsListResponse([]),
       );
-      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({});
+      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({} as any);
       vi.mocked(mockDependencies.eventBridgeClient.send).mockResolvedValue(createPutEventsResponse());
 
       await handler(createEvent());
@@ -199,8 +199,8 @@ describe("ArchiveStripeCustomer", () => {
       vi.mocked(mockDependencies.stripeClient.subscriptions.list).mockResolvedValue(
         createSubscriptionsListResponse([{ id: "sub_1", status: "active" }]),
       );
-      vi.mocked(mockDependencies.stripeClient.subscriptions.cancel).mockResolvedValue({});
-      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({});
+      vi.mocked(mockDependencies.stripeClient.subscriptions.cancel).mockResolvedValue({} as any);
+      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({} as any);
       vi.mocked(mockDependencies.eventBridgeClient.send).mockResolvedValue(createPutEventsResponse());
 
       await handler(createEvent());
@@ -219,7 +219,7 @@ describe("ArchiveStripeCustomer", () => {
       vi.mocked(mockDependencies.stripeClient.subscriptions.list).mockResolvedValue(
         createSubscriptionsListResponse([]),
       );
-      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({});
+      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({} as any);
       vi.mocked(mockDependencies.eventBridgeClient.send).mockResolvedValue(createPutEventsResponse());
 
       await handler(createEvent());
@@ -239,7 +239,7 @@ describe("ArchiveStripeCustomer", () => {
       vi.mocked(mockDependencies.stripeClient.subscriptions.list).mockResolvedValue(
         createSubscriptionsListResponse([]),
       );
-      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({});
+      vi.mocked(mockDependencies.stripeClient.customers.update).mockResolvedValue({} as any);
       vi.mocked(mockDependencies.eventBridgeClient.send).mockResolvedValue(createPutEventsResponse());
 
       await handler(createEvent({ deletionRequestId: "unique-del-req" }));

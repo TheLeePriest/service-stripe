@@ -78,7 +78,8 @@ export const sendUsageToStripe =
 
         meterEvents.push(meterEvent);
 
-        logger.logUsageEvent(stripeCustomerId, {
+        logger.info("Usage event prepared", {
+          stripeCustomerId,
           resourcesAnalyzed,
           messageId: record.messageId,
           subscriptionType,
