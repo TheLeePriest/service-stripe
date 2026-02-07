@@ -9,7 +9,7 @@ on:
 
 env:
   AWS_REGION: eu-west-2
-  STACK_NAME: service-stripe
+  STACK_NAME: service-stripe-stack
   STAGE: prod
   TARGET_EVENT_BUS_NAME: service-eventbridge-event-bus
 
