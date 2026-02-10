@@ -1,12 +1,14 @@
-import Stripe from "stripe";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { invoicePaymentFailed } from "./InvoicePaymentFailed";
 import { createStripeLogger } from "../lib/logger/createLogger";
+import { getStripeClient } from "../lib/stripeClient";
 import { env } from "../lib/env";
+import type { EventBridgeEvent } from "aws-lambda";
 
 const eventBusName = env.get("TARGET_EVENT_BUS_NAME");
 const idempotencyTableName = env.get("IDEMPOTENCY_TABLE_NAME");
+const siteUrl = env.get("SITE_URL") || "https://cdkinsights.dev";
 
 if (!eventBusName) {
 	throw new Error("TARGET_EVENT_BUS_NAME environment variable is not set");
@@ -16,9 +18,6 @@ if (!idempotencyTableName) {
 	throw new Error("IDEMPOTENCY_TABLE_NAME environment variable is not set");
 }
 
-const stripe = new Stripe(env.getRequired("STRIPE_SECRET_KEY", "Stripe secret key"), {
-	apiVersion: "2025-04-30.basil",
-});
 const eventBridgeClient = new EventBridgeClient({});
 const dynamoDBClient = new DynamoDBClient({});
 
@@ -27,11 +26,22 @@ const logger = createStripeLogger(
   env.getRequired("STAGE") as "dev" | "prod" | "test"
 );
 
-export const invoicePaymentFailedHandler = invoicePaymentFailed({
-	stripe,
-	eventBridgeClient,
-	dynamoDBClient,
-	eventBusName,
-	idempotencyTableName,
-	logger,
-}); 
+let handler: ReturnType<typeof invoicePaymentFailed> | undefined;
+
+export const invoicePaymentFailedHandler = async (
+  event: EventBridgeEvent<string, unknown>,
+) => {
+  if (!handler) {
+    const stripe = await getStripeClient(env.getRequired("STAGE"));
+    handler = invoicePaymentFailed({
+      stripe,
+      eventBridgeClient,
+      dynamoDBClient,
+      eventBusName,
+      idempotencyTableName,
+      siteUrl,
+      logger,
+    });
+  }
+  return handler(event);
+};

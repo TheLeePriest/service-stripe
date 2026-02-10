@@ -1,19 +1,26 @@
-import Stripe from "stripe";
 import { subscriptionPauseRequested } from "./SubscriptionPauseRequested";
 import { createStripeLogger } from "../lib/logger/createLogger";
+import { getStripeClient } from "../lib/stripeClient";
 import { env } from "../lib/env";
-
-const stripe = new Stripe(env.getRequired("STRIPE_SECRET_KEY", "Stripe secret key"), {
-  apiVersion: "2025-04-30.basil",
-});
+import type { EventBridgeEvent } from "aws-lambda";
+import type { SubscriptionPauseRequestedEvent } from "./SubscriptionPauseRequested.types";
 
 const logger = createStripeLogger(
   "subscriptionPauseRequested",
   env.getRequired("STAGE") as "dev" | "prod" | "test",
 );
 
-export const subscriptionPauseRequestedHandler = subscriptionPauseRequested({
-  stripeClient: stripe,
-  logger,
-});
+let handler: ReturnType<typeof subscriptionPauseRequested> | undefined;
 
+export const subscriptionPauseRequestedHandler = async (
+  event: EventBridgeEvent<"SubscriptionPauseRequested", SubscriptionPauseRequestedEvent>,
+) => {
+  if (!handler) {
+    const stripe = await getStripeClient(env.getRequired("STAGE"));
+    handler = subscriptionPauseRequested({
+      stripeClient: stripe,
+      logger,
+    });
+  }
+  return handler(event);
+};

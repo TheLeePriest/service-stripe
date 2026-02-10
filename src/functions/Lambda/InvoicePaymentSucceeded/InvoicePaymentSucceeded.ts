@@ -11,6 +11,7 @@ export const invoicePaymentSucceeded =
     eventBusName,
     dynamoDBClient,
     idempotencyTableName,
+    siteUrl,
     logger,
   }: InvoicePaymentSucceededDependencies) =>
   async (event: EventBridgeEvent<string, unknown>) => {
@@ -115,13 +116,17 @@ export const invoicePaymentSucceeded =
         cancelAtPeriodEnd: boolean;
       } | null = null;
 
+      let stripeSubscription: Stripe.Subscription | undefined;
+
       if (subscription) {
         try {
           logger.debug("Fetching subscription details to check for renewal", {
             subscriptionId: subscription,
           });
 
-          const stripeSubscription = await stripe.subscriptions.retrieve(subscription);
+          stripeSubscription = await stripe.subscriptions.retrieve(subscription, {
+            expand: ['items.data.price.product'],
+          });
 
           // Check if this is a renewal by comparing current period start with the invoice creation time
           // A renewal typically has a current_period_start that's close to or after the invoice creation
@@ -217,19 +222,12 @@ export const invoicePaymentSucceeded =
       });
 
       // Send email notification for subscription renewals
-      if (isRenewal && customerData.email && renewalData) {
-        // Get plan name from the subscription we already fetched above
+      if (isRenewal && customerData.email && renewalData && stripeSubscription) {
+        // Get plan name from the subscription we already fetched above (with expand)
         let planName = "Pro";
-        try {
-          const subForPlan = await stripe.subscriptions.retrieve(subscription!, {
-            expand: ['items.data.price.product'],
-          });
-          const item = subForPlan.items.data[0];
-          if (item?.price?.product && typeof item.price.product === 'object') {
-            planName = (item.price.product as Stripe.Product).name || "Pro";
-          }
-        } catch {
-          // Use default plan name if we can't fetch it
+        const item = stripeSubscription.items.data[0];
+        if (item?.price?.product && typeof item.price.product === 'object') {
+          planName = (item.price.product as Stripe.Product).name || "Pro";
         }
 
         // Format amount with currency symbol
@@ -265,7 +263,7 @@ export const invoicePaymentSucceeded =
                 amount: formattedAmount,
                 currency: currencySymbol,
                 nextRenewalDate,
-                dashboardUrl: `https://cdkinsights.dev/dashboard`,
+                dashboardUrl: `${siteUrl}/dashboard`,
               }),
               EventBusName: eventBusName,
             },

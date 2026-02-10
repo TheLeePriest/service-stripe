@@ -37,6 +37,7 @@ const deps: InvoicePaymentFailedDependencies = {
   eventBusName: "test-bus",
   dynamoDBClient: mockDynamoDB as unknown as InvoicePaymentFailedDependencies["dynamoDBClient"],
   idempotencyTableName: "test-table",
+  siteUrl: "https://dev.cdkinsights.dev",
   logger: mockLogger as InvoicePaymentFailedDependencies["logger"],
 };
 

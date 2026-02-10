@@ -2,31 +2,11 @@ import type { SQSEvent } from "aws-lambda";
 import type { SendUsageToStripeDependencies } from "./SendUsageToStripe.types";
 
 // ============================================================================
-// PRICE ID RESOLUTION
-// ============================================================================
-
-/**
- * Resolves the correct price ID for the usage event.
- * For TEAM/ENTERPRISE subscriptions, uses the enterprise price.
- * For PRO subscriptions, uses the provided meteredPriceId.
- */
-const resolvePriceId = (
-  subscriptionType: string | undefined,
-  meteredPriceId: string | undefined,
-  enterpriseUsagePriceId: string | undefined
-): string | undefined => {
-  if (subscriptionType === "TEAM" || subscriptionType === "ENTERPRISE") {
-    return enterpriseUsagePriceId;
-  }
-  return meteredPriceId;
-};
-
-// ============================================================================
 // MAIN HANDLER
 // ============================================================================
 
 export const sendUsageToStripe =
-  ({ stripeClient, logger, config }: SendUsageToStripeDependencies) =>
+  ({ stripeClient, logger }: SendUsageToStripeDependencies) =>
   async (event: SQSEvent) => {
     const meterEvents = [];
 
@@ -39,11 +19,9 @@ export const sendUsageToStripe =
         const body = JSON.parse(record.body);
         const { detail } = body;
         
-        const { 
-          stripeCustomerId, 
-          resourcesAnalyzed, 
-          subscriptionType, 
-          meteredPriceId,
+        const {
+          stripeCustomerId,
+          resourcesAnalyzed,
         } = detail;
 
         // Validate required fields
@@ -57,20 +35,13 @@ export const sendUsageToStripe =
           continue;
         }
 
-        // Resolve price ID
-        const priceId = resolvePriceId(
-          subscriptionType,
-          meteredPriceId,
-          config.enterpriseUsagePriceId
-        );
-
-        // Create meter event
+        // Create meter event — Stripe automatically maps usage to the
+        // correct metered price on the customer's subscription
         const meterEvent = {
           event_name: 'cdk_insights_usage',
           payload: {
             stripe_customer_id: stripeCustomerId,
             value: String(resourcesAnalyzed),
-            ...(priceId && { price_id: priceId }),
           },
           identifier: record.messageId,
           timestamp: Math.floor(Date.now() / 1000),
@@ -82,9 +53,7 @@ export const sendUsageToStripe =
           stripeCustomerId,
           resourcesAnalyzed,
           messageId: record.messageId,
-          subscriptionType,
           eventName: 'cdk_insights_usage',
-          priceId,
         });
       } catch (err) {
         logger.error("Failed to parse record body", {

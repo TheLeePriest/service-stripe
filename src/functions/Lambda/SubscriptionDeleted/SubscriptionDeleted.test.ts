@@ -43,6 +43,7 @@ describe("subscriptionDeleted", () => {
     eventBusName,
     dynamoDBClient: dynamoDBClientMock,
     idempotencyTableName: mockIdempotencyTableName,
+    siteUrl: "https://dev.cdkinsights.dev",
     logger: mockLogger,
   };
 

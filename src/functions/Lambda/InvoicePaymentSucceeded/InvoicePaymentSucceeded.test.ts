@@ -37,6 +37,7 @@ const deps: InvoicePaymentSucceededDependencies = {
   eventBusName: "test-bus",
   dynamoDBClient: mockDynamoDB as unknown as InvoicePaymentSucceededDependencies["dynamoDBClient"],
   idempotencyTableName: "test-table",
+  siteUrl: "https://dev.cdkinsights.dev",
   logger: mockLogger as InvoicePaymentSucceededDependencies["logger"],
 };
 
@@ -106,25 +107,21 @@ describe("invoicePaymentSucceeded", () => {
 
   it("detects renewal and sends email event", async () => {
     // Period start matches invoice created time = renewal
-    mockStripe.subscriptions.retrieve
-      .mockResolvedValueOnce({
-        id: "sub_123",
-        status: "active",
-        cancel_at_period_end: false,
-        items: {
-          data: [{ current_period_start: 1700000000, current_period_end: 1702678400 }],
-        },
-      })
-      .mockResolvedValueOnce({
-        id: "sub_123",
-        items: {
-          data: [{
-            price: {
-              product: { name: "Pro Plan" },
-            },
-          }],
-        },
-      });
+    // Single retrieve with expanded product data (combined call)
+    mockStripe.subscriptions.retrieve.mockResolvedValueOnce({
+      id: "sub_123",
+      status: "active",
+      cancel_at_period_end: false,
+      items: {
+        data: [{
+          current_period_start: 1700000000,
+          current_period_end: 1702678400,
+          price: {
+            product: { name: "Pro Plan" },
+          },
+        }],
+      },
+    });
 
     await invoicePaymentSucceeded(deps)(makeEvent());
 

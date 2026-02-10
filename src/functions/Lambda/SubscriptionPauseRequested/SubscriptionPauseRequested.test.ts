@@ -58,6 +58,8 @@ describe("subscriptionPauseRequested", () => {
 
     expect(mockStripe.subscriptions.update).toHaveBeenCalledWith("sub_123", {
       cancel_at_period_end: true,
+    }, {
+      idempotencyKey: "pause-cancel-sub_123-evt-1",
     });
   });
 

@@ -62,6 +62,7 @@ const baseDeps = {
   logger: mockLogger,
   dynamoDBClient: { send: vi.fn() } as unknown as SubscriptionEventConductorDependencies['dynamoDBClient'],
   idempotencyTableName: "test-table",
+  siteUrl: "https://dev.cdkinsights.dev",
 };
 
 const makeEvent = (
@@ -257,6 +258,7 @@ describe("subscriptionEventConductor", () => {
       eventBusName: baseDeps.eventBusName,
       dynamoDBClient: baseDeps.dynamoDBClient,
       idempotencyTableName: baseDeps.idempotencyTableName,
+      siteUrl: baseDeps.siteUrl,
       logger: baseDeps.logger,
     });
 

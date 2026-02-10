@@ -11,6 +11,7 @@ export const invoicePaymentFailed =
     eventBusName,
     dynamoDBClient,
     idempotencyTableName,
+    siteUrl,
     logger,
   }: InvoicePaymentFailedDependencies) =>
   async (event: EventBridgeEvent<string, unknown>) => {
@@ -180,7 +181,7 @@ export const invoicePaymentFailed =
                 customerName: customerData.name || undefined,
                 failureReason,
                 retryDate,
-                updatePaymentUrl: "https://cdkinsights.dev/account/billing?update_payment=true",
+                updatePaymentUrl: `${siteUrl}/account/billing?update_payment=true`,
               }),
               EventBusName: eventBusName,
             },

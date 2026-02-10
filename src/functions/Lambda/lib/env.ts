@@ -9,7 +9,7 @@ const AppEnvironmentSchema = z.object({
   EVENT_BUS_NAME: z.string().optional(),
   SCHEDULER_ROLE_ARN: z.string().optional(),
   EVENT_BUS_ARN: z.string().optional(),
-  STRIPE_ENTERPRISE_USAGE_PRICE_ID: z.string().optional(),
+  SITE_URL: z.string().optional(),
 });
 
 const FullSchema = mergeSchemas(BaseEnvironmentSchema, AppEnvironmentSchema);
@@ -29,7 +29,7 @@ type EnvType = {
   EVENT_BUS_NAME?: string;
   SCHEDULER_ROLE_ARN?: string;
   EVENT_BUS_ARN?: string;
-  STRIPE_ENTERPRISE_USAGE_PRICE_ID?: string;
+  SITE_URL?: string;
   NODE_ENV?: "test" | "development" | "production";
   SERVICE_NAME?: string;
   VERSION?: string;

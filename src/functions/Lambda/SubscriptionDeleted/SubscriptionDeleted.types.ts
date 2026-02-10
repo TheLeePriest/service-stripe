@@ -14,6 +14,7 @@ export type SubscriptionDeletedDependencies = {
   eventBusName: string;
   dynamoDBClient: DynamoDBClient;
   idempotencyTableName: string;
+  siteUrl: string;
   logger: Logger;
 };
 

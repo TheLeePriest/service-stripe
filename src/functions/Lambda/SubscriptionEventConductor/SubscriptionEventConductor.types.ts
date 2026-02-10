@@ -19,7 +19,8 @@ export type SubscriptionEventConductorDependencies = {
   schedulerClient: SchedulerClient;
   dynamoDBClient: DynamoDBClient;
   idempotencyTableName: string;
-   logger: Logger;
+  siteUrl: string;
+  logger: Logger;
 };
 
 export type StripeEventBridgeDetail = {

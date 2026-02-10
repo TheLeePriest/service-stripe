@@ -1,21 +1,23 @@
-import Stripe from "stripe";
 import { sendUsageToStripe } from "./SendUsageToStripe";
 import { createStripeLogger } from "../lib/logger/createLogger";
+import { getStripeClient } from "../lib/stripeClient";
 import { env } from "../lib/env";
-
-const stripe = new Stripe(env.getRequired("STRIPE_SECRET_KEY", "Stripe secret key"), {
-  apiVersion: "2025-04-30.basil",
-});
+import type { SQSEvent } from "aws-lambda";
 
 const logger = createStripeLogger(
   "sendUsageToStripe",
   env.getRequired("STAGE") as "dev" | "prod" | "test"
 );
 
-export const sendUsageToStripeHandler = sendUsageToStripe({
-  stripeClient: stripe,
-  logger,
-  config: {
-    enterpriseUsagePriceId: env.get("STRIPE_ENTERPRISE_USAGE_PRICE_ID"),
-  },
-});
+let handler: ReturnType<typeof sendUsageToStripe> | undefined;
+
+export const sendUsageToStripeHandler = async (event: SQSEvent) => {
+  if (!handler) {
+    const stripe = await getStripeClient(env.getRequired("STAGE"));
+    handler = sendUsageToStripe({
+      stripeClient: stripe,
+      logger,
+    });
+  }
+  return handler(event);
+};

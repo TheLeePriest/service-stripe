@@ -23,7 +23,6 @@ const mockLogger = {
 const deps: SendUsageToStripeDependencies = {
   stripeClient: mockStripe as SendUsageToStripeDependencies["stripeClient"],
   logger: mockLogger as SendUsageToStripeDependencies["logger"],
-  config: { enterpriseUsagePriceId: "price_enterprise" },
 };
 
 const makeRecord = (detail: Record<string, unknown>) => ({
@@ -44,14 +43,12 @@ describe("sendUsageToStripe", () => {
     mockStripe.billing.meterEvents.create.mockResolvedValue({});
   });
 
-  it("sends meter event for PRO subscription", async () => {
+  it("sends meter event with customer ID and usage value", async () => {
     const event = {
       Records: [
         makeRecord({
           stripeCustomerId: "cus_123",
           resourcesAnalyzed: 5,
-          subscriptionType: "PRO",
-          meteredPriceId: "price_pro",
         }),
       ],
     };
@@ -61,17 +58,16 @@ describe("sendUsageToStripe", () => {
     expect(mockStripe.billing.meterEvents.create).toHaveBeenCalledWith(
       expect.objectContaining({
         event_name: "cdk_insights_usage",
-        payload: expect.objectContaining({
+        payload: {
           stripe_customer_id: "cus_123",
           value: "5",
-          price_id: "price_pro",
-        }),
+        },
       }),
       expect.objectContaining({ idempotencyKey: expect.stringContaining("usage-msg-1") }),
     );
   });
 
-  it("uses enterprise price for TEAM subscription", async () => {
+  it("sends meter event for TEAM subscription without price_id", async () => {
     const event = {
       Records: [
         makeRecord({
@@ -85,7 +81,9 @@ describe("sendUsageToStripe", () => {
     await sendUsageToStripe(deps)(event as any);
 
     const call = mockStripe.billing.meterEvents.create.mock.calls[0][0];
-    expect(call.payload.price_id).toBe("price_enterprise");
+    expect(call.payload.stripe_customer_id).toBe("cus_123");
+    expect(call.payload.value).toBe("10");
+    expect(call.payload).not.toHaveProperty("price_id");
   });
 
   it("skips records with missing required fields", async () => {
@@ -124,8 +122,6 @@ describe("sendUsageToStripe", () => {
         makeRecord({
           stripeCustomerId: "cus_123",
           resourcesAnalyzed: 5,
-          subscriptionType: "PRO",
-          meteredPriceId: "price_pro",
         }),
       ],
     };
@@ -138,8 +134,8 @@ describe("sendUsageToStripe", () => {
   it("processes multiple records in a batch", async () => {
     const event = {
       Records: [
-        makeRecord({ stripeCustomerId: "cus_1", resourcesAnalyzed: 3, subscriptionType: "PRO", meteredPriceId: "p1" }),
-        makeRecord({ stripeCustomerId: "cus_2", resourcesAnalyzed: 7, subscriptionType: "ENTERPRISE" }),
+        makeRecord({ stripeCustomerId: "cus_1", resourcesAnalyzed: 3 }),
+        makeRecord({ stripeCustomerId: "cus_2", resourcesAnalyzed: 7 }),
       ],
     };
 

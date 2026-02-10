@@ -11,7 +11,6 @@ export type SendUsageToStripeDependencies = {
             payload: {
               stripe_customer_id: string;
               value: string;
-              price_id?: string;
             };
             identifier: string;
             timestamp: number;
@@ -22,7 +21,4 @@ export type SendUsageToStripeDependencies = {
     };
   };
   logger: Logger;
-  config: {
-    enterpriseUsagePriceId?: string;
-  };
 };

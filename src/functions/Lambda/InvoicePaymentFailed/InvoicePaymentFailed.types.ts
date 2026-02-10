@@ -9,6 +9,7 @@ export interface InvoicePaymentFailedDependencies {
   eventBusName: string;
   dynamoDBClient: DynamoDBClient;
   idempotencyTableName: string;
+  siteUrl: string;
   logger: Logger;
 }
 

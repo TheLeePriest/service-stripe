@@ -23,6 +23,7 @@ export interface SubscriptionPauseRequestedDependencies {
       update: (
         id: string,
         params: { cancel_at_period_end: boolean },
+        options?: { idempotencyKey?: string },
       ) => Promise<unknown>;
     };
   };

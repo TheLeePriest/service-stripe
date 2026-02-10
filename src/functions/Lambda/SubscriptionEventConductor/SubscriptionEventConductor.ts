@@ -23,6 +23,7 @@ export const subscriptionEventConductor =
     logger,
     dynamoDBClient,
     idempotencyTableName,
+    siteUrl,
   }: SubscriptionEventConductorDependencies) =>
   async (
     event: EventBridgeEvent<string, Stripe.Event>,
@@ -375,6 +376,7 @@ export const subscriptionEventConductor =
           eventBusName,
           dynamoDBClient,
           idempotencyTableName,
+          siteUrl,
           logger,
         })(deletedEvent);
         break;

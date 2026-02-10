@@ -14,6 +14,7 @@ export const subscriptionDeleted =
     logger,
     dynamoDBClient,
     idempotencyTableName,
+    siteUrl,
   }: SubscriptionDeletedDependencies) =>
   async (event: SubscriptionDeletedEvent) => {
     const {
@@ -139,7 +140,7 @@ export const subscriptionDeleted =
                   stripeCustomerId: customer,
                   customerEmail: email,
                   customerName: stripeCustomer.name || undefined,
-                  upgradeUrl: "https://cdkinsights.dev/pricing?upgrade=true",
+                  upgradeUrl: `${siteUrl}/pricing?upgrade=true`,
                 }),
               },
             ],
@@ -221,7 +222,7 @@ export const subscriptionDeleted =
                   customerEmail: email,
                   customerName: stripeCustomer.name || undefined,
                   accessEndDate,
-                  reactivateUrl: "https://cdkinsights.dev/pricing?reactivate=true",
+                  reactivateUrl: `${siteUrl}/pricing?reactivate=true`,
                   ...(refundInfo && {
                     refundProcessed: refundInfo.refundProcessed,
                     refundAmount: refundInfo.refundAmount,

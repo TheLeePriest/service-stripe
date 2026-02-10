@@ -33,13 +33,8 @@ export class ServiceStripeStack extends Stack {
     const { stage, targetEventBusName, serviceName } = props;
     const tsConfigPath = path.join(__dirname, "../../tsconfig.json");
 
-    const STRIPE_SECRET_KEY = StringParameter.fromStringParameterAttributes(
-      this,
-      `${serviceName}-secret-key-${stage}`,
-      {
-        parameterName: `/${stage}/stripe/secret`,
-      },
-    ).stringValue;
+    const stripeSecretParamName = `/${stage}/stripe/secret`;
+    const siteUrl = stage === "prod" ? "https://cdkinsights.dev" : "https://dev.cdkinsights.dev";
 
     const STRIPE_EVENT_BUS_ID = StringParameter.fromStringParameterAttributes(
       this,
@@ -131,14 +126,6 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 192, // Optimized: I/O bound (Stripe API + SQS)
           environment: {
-            STRIPE_SECRET_KEY,
-            STRIPE_ENTERPRISE_USAGE_PRICE_ID: StringParameter.fromStringParameterAttributes(
-              this,
-              `${serviceName}-enterprise-usage-price-id-${stage}`,
-              {
-                parameterName: `/${stage}/stripe/enterprise-usage-price-id`,
-              },
-            ).stringValue,
             STAGE: stage,
           },
         },
@@ -238,7 +225,6 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 1024, // Increased for complex subscription processing
           environment: {
-            STRIPE_SECRET_KEY,
             STAGE: stage,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
             IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
@@ -303,12 +289,12 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 256,
           environment: {
-            STRIPE_SECRET_KEY,
             STAGE: stage,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
             SCHEDULER_ROLE_ARN: schedulerRole.roleArn,
             EVENT_BUS_ARN: targetEventBus.eventBusArn,
             IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
+            SITE_URL: siteUrl,
           },
         },
       },
@@ -398,7 +384,6 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 256,
           environment: {
-            STRIPE_SECRET_KEY,
             STAGE: stage,
           },
         },
@@ -457,7 +442,6 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 192, // Optimized: I/O bound (Stripe + EventBridge)
           environment: {
-            STRIPE_SECRET_KEY,
             STAGE: stage,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
             IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
@@ -500,10 +484,10 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 192, // Optimized: I/O bound (Stripe + EventBridge)
           environment: {
-            STRIPE_SECRET_KEY,
             STAGE: stage,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
             IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
+            SITE_URL: siteUrl,
           },
         },
       },
@@ -543,10 +527,10 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 192, // Optimized: I/O bound (Stripe + EventBridge)
           environment: {
-            STRIPE_SECRET_KEY,
             STAGE: stage,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
             IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
+            SITE_URL: siteUrl,
           },
         },
       },
@@ -586,7 +570,6 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 192, // Optimized: I/O bound (Stripe + EventBridge)
           environment: {
-            STRIPE_SECRET_KEY,
             STAGE: stage,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
             IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
@@ -629,7 +612,6 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 192, // Optimized: I/O bound (Stripe + EventBridge)
           environment: {
-            STRIPE_SECRET_KEY,
             STAGE: stage,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
             IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
@@ -672,7 +654,6 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 192, // Optimized: I/O bound (Stripe + EventBridge)
           environment: {
-            STRIPE_SECRET_KEY,
             STAGE: stage,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
             IDEMPOTENCY_TABLE_NAME: idempotencyTable.tableName,
@@ -715,7 +696,6 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 192, // Optimized: I/O bound (Stripe API call only)
           environment: {
-            STRIPE_SECRET_KEY,
             STAGE: stage,
           },
         },
@@ -907,7 +887,6 @@ export class ServiceStripeStack extends Stack {
           timeout: Duration.seconds(30),
           memorySize: 192,
           environment: {
-            STRIPE_SECRET_KEY,
             STAGE: stage,
             TARGET_EVENT_BUS_NAME: targetEventBusName,
           },
@@ -938,6 +917,36 @@ export class ServiceStripeStack extends Stack {
         retryAttempts: 2,
       }),
     );
+
+    // ============================================================================
+    // SSM PERMISSIONS — allow all Stripe-using Lambdas to read the secret at runtime
+    // ============================================================================
+
+    const ssmReadPolicy = new PolicyStatement({
+      actions: ["ssm:GetParameter"],
+      resources: [
+        `arn:aws:ssm:${this.region}:${this.account}:parameter${stripeSecretParamName}`,
+      ],
+    });
+
+    const stripeLambdas = [
+      sessionEventConductorLambda,
+      subscriptionEventConductorLambda,
+      invoiceCreatedLambda,
+      invoicePaymentSucceededLambda,
+      invoicePaymentFailedLambda,
+      paymentMethodAttachedLambda,
+      setupIntentSucceededLambda,
+      customerCreatedLambda,
+      sendUsageToStripeLambda,
+      sendQuantityChangeToStripeLambda,
+      subscriptionPauseRequestedLambda,
+      archiveStripeCustomerLambda,
+    ];
+
+    for (const lambda of stripeLambdas) {
+      lambda.tsLambdaFunction.addToRolePolicy(ssmReadPolicy);
+    }
 
     // ============================================================================
     // CLOUDWATCH ALARMS

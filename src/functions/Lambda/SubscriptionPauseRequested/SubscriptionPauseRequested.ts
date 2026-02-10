@@ -67,6 +67,8 @@ export const subscriptionPauseRequested =
     // Cancel the subscription at period end (since we can't pause metered subscriptions)
     await stripeClient.subscriptions.update(stripeSubscriptionId, {
       cancel_at_period_end: true,
+    }, {
+      idempotencyKey: `pause-cancel-${stripeSubscriptionId}-${event.id}`,
     });
 
     logger.info("Cancelled Stripe subscription at period end", {

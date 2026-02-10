@@ -1,18 +1,26 @@
-import Stripe from "stripe";
 import { sendQuantityChangeToStripe } from "./SendQuantityChangeToStripe";
 import { createStripeLogger } from "../lib/logger/createLogger";
+import { getStripeClient } from "../lib/stripeClient";
 import { env } from "../lib/env";
-
-const stripe = new Stripe(env.getRequired("STRIPE_SECRET_KEY", "Stripe secret key"), {
-  apiVersion: "2025-04-30.basil",
-});
+import type { EventBridgeEvent } from "aws-lambda";
+import type { LicenseQuantityChange } from "./SendQuantityChangeToStripe.types";
 
 const logger = createStripeLogger(
   "sendQuantityChangeToStripe",
   env.getRequired("STAGE") as "dev" | "prod" | "test"
 );
 
-export const sendQuantityChangeToStripeHandler = sendQuantityChangeToStripe({
-  stripeClient: stripe,
-  logger,
-});
+let handler: ReturnType<typeof sendQuantityChangeToStripe> | undefined;
+
+export const sendQuantityChangeToStripeHandler = async (
+  event: EventBridgeEvent<"LicenseCancelled" | "LicenseUncancelled", LicenseQuantityChange>,
+) => {
+  if (!handler) {
+    const stripe = await getStripeClient(env.getRequired("STAGE"));
+    handler = sendQuantityChangeToStripe({
+      stripeClient: stripe,
+      logger,
+    });
+  }
+  return handler(event);
+};
